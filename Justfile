@@ -4,6 +4,7 @@ mod rust "just/rust.just"
 mod yocto "just/yocto.just"
 mod git "just/git.just"
 mod ci "just/ci.just"
+mod infra "just/infra.just"
 
 default:
   @just --list --justfile {{justfile()}}

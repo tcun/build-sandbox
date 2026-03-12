@@ -1,6 +1,7 @@
 # GitHub Actions Runner Deployment with Podman
 #
-# This compose file deploys the Yocto build runner with persistent caches.
+# This compose file deploys only the Yocto build runner and its caches.
+# Artifact serving (Caddy) is managed separately under `infra/services/artifact-server`.
 #
 # Quick start:
 #   1. Create a long-lived GitHub token (recommended) and put it in .env:
@@ -24,9 +25,11 @@ services:
     build:
       context: .
       dockerfile: Containerfile
+      target: ${RUNNER_TARGET:-runner}
       args:
         RUNNER_VERSION: "2.321.0"
         RUST_VERSION: "1.91.1"
+        KAS_VERSION: "4.8"
     image: ghcr.io/backburnerlabs/yocto-runner:latest
     container_name: yocto-runner
     hostname: yocto-runner-01
@@ -53,7 +56,7 @@ services:
       - yocto-sstate:/cache/sstate-cache:Z
       # Runner work directory (checkout + build, ~100GB+)
       - yocto-workdir:/home/runner/work:Z
-      # Local artifact storage for dev builds (accessible via HTTP server)
+      # Local artifact storage for dev builds (can be served by separate Caddy stack)
       - yocto-artifacts:/srv/yocto-artifacts:Z
 
     # Resource limits - Yocto builds are resource-intensive
@@ -78,21 +81,6 @@ services:
       nproc:
         soft: 65536
         hard: 65536
-
-  # Lightweight HTTP server for serving build artifacts locally
-  # Access artifacts at: http://localhost:8080/dev/stm32mp25-disco/<sha>/
-  artifact-server:
-    image: docker.io/library/caddy:2-alpine
-    container_name: artifact-server
-    hostname: artifact-server
-    restart: unless-stopped
-    ports:
-      # Bind to all interfaces so it's reachable on the LAN
-      - "0.0.0.0:8080:80"
-    volumes:
-      - yocto-artifacts:/srv:ro
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-  command: caddy file-server --root /srv --browse --listen :80
 
 volumes:
   # Named volumes for persistent storage

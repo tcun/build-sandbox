@@ -1,0 +1,222 @@
+# GitHub Actions Self-Hosted Runner Image for Yocto/KAS and Rust
+#
+# Build targets:
+#   runner-core       Minimal self-hosted runner only
+#   runner-yocto      Runner + Yocto/KAS toolchain
+#   runner-rust       Runner + Rust toolchain
+#   runner-yocto-rust Runner + Yocto/KAS + Rust (default/final)
+#
+# Examples:
+#   podman build -f Containerfile --target runner-core -t ghcr.io/backburnerlabs/runner-core:latest .
+#   podman build -f Containerfile --target runner-yocto -t ghcr.io/backburnerlabs/runner-yocto:latest .
+#   podman build -f Containerfile --target runner-rust -t ghcr.io/backburnerlabs/runner-rust:latest .
+#   podman build -f Containerfile -t ghcr.io/backburnerlabs/yocto-runner:latest .
+
+ARG UBUNTU_VERSION=22.04
+ARG RUNNER_VERSION=2.321.0
+ARG RUST_VERSION=1.91.1
+ARG KAS_VERSION=4.8
+
+# =============================================================================
+# Stage 1: Common Base
+# =============================================================================
+FROM docker.io/library/ubuntu:${UBUNTU_VERSION} AS common-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    locales \
+    sudo \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN locale-gen en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# =============================================================================
+# Stage 2: Rust Toolchain Builder
+# =============================================================================
+FROM common-base AS rust-builder
+
+ARG RUST_VERSION
+
+ENV RUSTUP_HOME=/opt/rust/rustup
+ENV CARGO_HOME=/opt/rust/cargo
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
+    -y \
+    --default-toolchain ${RUST_VERSION} \
+    --profile minimal \
+    --component rustfmt \
+    --component clippy
+
+RUN . ${CARGO_HOME}/env && \
+    rustup target add aarch64-unknown-linux-gnu aarch64-unknown-linux-musl
+
+RUN . ${CARGO_HOME}/env && \
+    cargo install cargo-audit cargo-outdated
+
+# =============================================================================
+# Stage 3: Core Runner
+# =============================================================================
+FROM common-base AS runner-core
+
+ARG RUNNER_VERSION
+ARG RUNNER_UID=1000
+ARG RUNNER_GID=1000
+
+LABEL org.opencontainers.image.title="GitHub Actions Runner"
+LABEL org.opencontainers.image.description="Self-hosted GitHub Actions runner base image"
+LABEL org.opencontainers.image.vendor="BackburnerLabs"
+LABEL org.opencontainers.image.source="https://github.com/BackburnerLabs/savers-aps"
+
+ENV RUNNER_MANUALLY_TRAP_SIG=1
+ENV ACTIONS_RUNNER_PRINT_LOG_TO_STDOUT=1
+
+RUN groupadd --gid ${RUNNER_GID} runner && \
+    useradd --uid ${RUNNER_UID} --gid ${RUNNER_GID} --shell /bin/bash --create-home runner && \
+    echo "runner ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/runner && \
+    chmod 0440 /etc/sudoers.d/runner
+
+WORKDIR /home/runner
+
+RUN mkdir -p /home/runner/actions-runner && \
+    cd /home/runner/actions-runner && \
+    curl -fsSL -o actions-runner.tar.gz \
+      "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" && \
+    tar xzf actions-runner.tar.gz && \
+    rm actions-runner.tar.gz && \
+    ./bin/installdependencies.sh && \
+    chown -R runner:runner /home/runner
+
+RUN mkdir -p /cache/downloads /cache/sstate-cache /home/runner/work /srv/yocto-artifacts && \
+    chown -R runner:runner /cache /home/runner/work /srv/yocto-artifacts
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 755 /usr/local/bin/entrypoint.sh
+
+# Optional helper for interactive runner shells.
+RUN cat > /usr/local/bin/kas-build.sh <<'SCRIPT' && chmod 755 /usr/local/bin/kas-build.sh
+#!/bin/bash
+set -euo pipefail
+if [[ $# -lt 1 ]]; then
+  echo "Usage: kas-build.sh <kas-config> [bitbake-target]" >&2
+  exit 1
+fi
+CONFIG="$1"
+TARGET="${2:-}"
+if [[ -n "$TARGET" ]]; then
+  exec kas build "$CONFIG" --target "$TARGET"
+fi
+exec kas build "$CONFIG"
+SCRIPT
+
+USER runner
+WORKDIR /home/runner/actions-runner
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD [[ -x /home/runner/actions-runner/run.sh ]] && pgrep -f "Runner.Listener" > /dev/null || exit 1
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# =============================================================================
+# Stage 4: Yocto/KAS Layer
+# =============================================================================
+FROM runner-core AS runner-yocto
+
+ARG KAS_VERSION
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    chrpath \
+    cpio \
+    debianutils \
+    diffstat \
+    file \
+    gawk \
+    gcc \
+    g++ \
+    make \
+    patch \
+    python3 \
+    python3-dev \
+    python3-distutils \
+    python3-git \
+    python3-jinja2 \
+    python3-pexpect \
+    python3-pip \
+    python3-subunit \
+    python3-venv \
+    bzip2 \
+    iputils-ping \
+    libacl1 \
+    liblz4-tool \
+    libncurses5-dev \
+    libsdl1.2-dev \
+    libssl-dev \
+    lz4 \
+    mesa-common-dev \
+    net-tools \
+    pbzip2 \
+    pigz \
+    procps \
+    rsync \
+    socat \
+    texinfo \
+    vim-tiny \
+    wget \
+    xterm \
+    xsltproc \
+    docbook-utils \
+    fop \
+    dblatex \
+    xmlto \
+    xz-utils \
+    zstd \
+    git-lfs \
+    iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m pip install --no-cache-dir pipx && \
+    PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install "kas==${KAS_VERSION}"
+
+ENV DL_DIR=/cache/downloads
+ENV SSTATE_DIR=/cache/sstate-cache
+ENV BB_NUMBER_THREADS=auto
+ENV PARALLEL_MAKE="-j auto"
+
+USER runner
+WORKDIR /home/runner/actions-runner
+
+# =============================================================================
+# Stage 5: Rust Layer
+# =============================================================================
+FROM runner-core AS runner-rust
+
+COPY --from=rust-builder /opt/rust /opt/rust
+
+ENV RUSTUP_HOME=/opt/rust/rustup
+ENV CARGO_HOME=/opt/rust/cargo
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+
+# =============================================================================
+# Stage 6: Combined Yocto + Rust (default)
+# =============================================================================
+FROM runner-yocto AS runner-yocto-rust
+
+COPY --from=rust-builder /opt/rust /opt/rust
+
+ENV RUSTUP_HOME=/opt/rust/rustup
+ENV CARGO_HOME=/opt/rust/cargo
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+
+# Keep backward-compatible stage name for existing build scripts.
+FROM runner-yocto-rust AS runner
