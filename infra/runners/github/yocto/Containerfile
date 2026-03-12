@@ -14,8 +14,9 @@
 
 ARG UBUNTU_VERSION=22.04
 ARG RUNNER_VERSION=2.321.0
-ARG RUST_VERSION=1.91.1
+ARG RUST_VERSION=1.94.0
 ARG KAS_VERSION=4.8
+ARG INSTALL_RUST_TOOLS=false
 
 # =============================================================================
 # Stage 1: Common Base
@@ -45,9 +46,16 @@ ENV LC_ALL=en_US.UTF-8
 FROM common-base AS rust-builder
 
 ARG RUST_VERSION
+ARG INSTALL_RUST_TOOLS
 
 ENV RUSTUP_HOME=/opt/rust/rustup
 ENV CARGO_HOME=/opt/rust/cargo
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
     -y \
@@ -59,8 +67,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
 RUN . ${CARGO_HOME}/env && \
     rustup target add aarch64-unknown-linux-gnu aarch64-unknown-linux-musl
 
-RUN . ${CARGO_HOME}/env && \
-    cargo install cargo-audit cargo-outdated
+RUN if [ "${INSTALL_RUST_TOOLS}" = "true" ]; then \
+      . ${CARGO_HOME}/env && \
+      cargo install --locked cargo-audit cargo-outdated; \
+    else \
+      echo "Skipping optional cargo tool install (INSTALL_RUST_TOOLS=false)"; \
+    fi
 
 # =============================================================================
 # Stage 3: Core Runner
@@ -102,20 +114,20 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 755 /usr/local/bin/entrypoint.sh
 
 # Optional helper for interactive runner shells.
-RUN cat > /usr/local/bin/kas-build.sh <<'SCRIPT' && chmod 755 /usr/local/bin/kas-build.sh
-#!/bin/bash
-set -euo pipefail
-if [[ $# -lt 1 ]]; then
-  echo "Usage: kas-build.sh <kas-config> [bitbake-target]" >&2
-  exit 1
-fi
-CONFIG="$1"
-TARGET="${2:-}"
-if [[ -n "$TARGET" ]]; then
-  exec kas build "$CONFIG" --target "$TARGET"
-fi
-exec kas build "$CONFIG"
-SCRIPT
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  'set -euo pipefail' \
+  'if [[ $# -lt 1 ]]; then' \
+  '  echo "Usage: kas-build.sh <kas-config> [bitbake-target]" >&2' \
+  '  exit 1' \
+  'fi' \
+  'CONFIG="$1"' \
+  'TARGET="${2:-}"' \
+  'if [[ -n "$TARGET" ]]; then' \
+  '  exec kas build "$CONFIG" --target "$TARGET"' \
+  'fi' \
+  'exec kas build "$CONFIG"' \
+  > /usr/local/bin/kas-build.sh && chmod 755 /usr/local/bin/kas-build.sh
 
 USER runner
 WORKDIR /home/runner/actions-runner

@@ -16,6 +16,14 @@ RUNNER_REMOVE_ON_EXIT="${RUNNER_REMOVE_ON_EXIT:-false}"
 GITHUB_URL="${GITHUB_URL:-https://github.com}"
 GITHUB_API_URL="${GITHUB_API_URL:-https://api.github.com}"
 
+# Common placeholder values that should be treated as unset.
+if [[ "${RUNNER_PAT}" == "your_token_here" ]]; then
+    RUNNER_PAT=""
+fi
+if [[ "${RUNNER_TOKEN}" == "your_token_here" ]]; then
+    RUNNER_TOKEN=""
+fi
+
 fetch_registration_token() {
     local scope
     local endpoint
@@ -119,7 +127,9 @@ else
 fi
 
 if [[ "${need_registration}" == "true" ]]; then
-    if [[ -z "${RUNNER_TOKEN}" && -n "${RUNNER_PAT}" ]]; then
+    # Prefer minting a fresh short-lived registration token from RUNNER_PAT
+    # when available. This avoids expired RUNNER_TOKEN reuse.
+    if [[ -n "${RUNNER_PAT}" ]]; then
         fetch_registration_token
     fi
 
@@ -143,6 +153,12 @@ if [[ "${need_registration}" == "true" ]]; then
         --runnergroup "${RUNNER_GROUP}" \
         --unattended \
         --replace
+
+    if [[ ! -f ".runner" ]]; then
+        echo "ERROR: Runner registration did not persist local .runner config." >&2
+        echo "       Verify RUNNER_REPO and token permissions, then retry." >&2
+        exit 1
+    fi
 fi
 
 # Cleanup function for graceful shutdown

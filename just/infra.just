@@ -4,6 +4,9 @@ ROOT_DIR := justfile_directory()
 INFRA_DIR := ROOT_DIR + "/infra"
 DEFAULT_RUNNER_STACK := "runners/github/yocto"
 DEFAULT_ARTIFACT_STACK := "services/artifact-server"
+RUNNER_ENV_FILE := ROOT_DIR + "/infra/runners/github/yocto/.env"
+RUNNER_ENV_EXAMPLE := ROOT_DIR + "/infra/runners/github/yocto/.env.example"
+RUST_TOOLCHAIN_FILE := ROOT_DIR + "/apps/rust-toolchain.toml"
 
 # Generic: start one compose stack under infra/.
 # Example: just infra::stack-up stack=runners/github/yocto build=true
@@ -43,37 +46,37 @@ stack-logs stack=DEFAULT_RUNNER_STACK tail="200" follow="false":
 # Example: just infra::up stack=services/artifact-server
 up stack="" build="true":
   @if [[ -n "{{stack}}" ]]; then \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-up stack="{{stack}}" build="{{build}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-up "{{stack}}" "{{build}}"; \
     else \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-up stack="{{DEFAULT_RUNNER_STACK}}" build="true"; \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-up stack="{{DEFAULT_ARTIFACT_STACK}}" build="false"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-up "{{DEFAULT_RUNNER_STACK}}" "true"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-up "{{DEFAULT_ARTIFACT_STACK}}" "false"; \
     fi
 
 # Stop both default local stacks, or one selected stack.
 down stack="":
   @if [[ -n "{{stack}}" ]]; then \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-down stack="{{stack}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-down "{{stack}}"; \
     else \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-down stack="{{DEFAULT_ARTIFACT_STACK}}"; \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-down stack="{{DEFAULT_RUNNER_STACK}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-down "{{DEFAULT_ARTIFACT_STACK}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-down "{{DEFAULT_RUNNER_STACK}}"; \
     fi
 
 # Show ps for both default local stacks, or one selected stack.
 ps stack="":
   @if [[ -n "{{stack}}" ]]; then \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-ps stack="{{stack}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-ps "{{stack}}"; \
     else \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-ps stack="{{DEFAULT_RUNNER_STACK}}"; \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-ps stack="{{DEFAULT_ARTIFACT_STACK}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-ps "{{DEFAULT_RUNNER_STACK}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-ps "{{DEFAULT_ARTIFACT_STACK}}"; \
     fi
 
 # Show logs for both default local stacks, or one selected stack.
 logs stack="" tail="200" follow="false":
   @if [[ -n "{{stack}}" ]]; then \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-logs stack="{{stack}}" tail="{{tail}}" follow="{{follow}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-logs "{{stack}}" "{{tail}}" "{{follow}}"; \
     else \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-logs stack="{{DEFAULT_RUNNER_STACK}}" tail="{{tail}}" follow="{{follow}}"; \
-      just --justfile {{ROOT_DIR}}/Justfile infra::stack-logs stack="{{DEFAULT_ARTIFACT_STACK}}" tail="{{tail}}" follow="{{follow}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-logs "{{DEFAULT_RUNNER_STACK}}" "{{tail}}" "{{follow}}"; \
+      just --justfile {{ROOT_DIR}}/Justfile infra::stack-logs "{{DEFAULT_ARTIFACT_STACK}}" "{{tail}}" "{{follow}}"; \
     fi
 
 # Publish local Yocto deploy artifacts into the shared artifact volume.
@@ -104,6 +107,8 @@ artifact-url variant="dev" machine="qemux86-64" label="latest" host="localhost:8
 
 # Convenience aliases for default runner/artifact stacks.
 runner-up:
+  @just --justfile {{ROOT_DIR}}/Justfile infra::runner-env-sync
+  @just --justfile {{ROOT_DIR}}/Justfile infra::runner-env-validate
   @just --justfile {{ROOT_DIR}}/Justfile infra::up "runners/github/yocto" "true"
 
 runner-down:
@@ -120,3 +125,42 @@ artifact-down:
 
 artifact-logs tail="200" follow="false":
   @just --justfile {{ROOT_DIR}}/Justfile infra::logs "services/artifact-server" "{{tail}}" "{{follow}}"
+
+# Sync runner .env defaults from workspace/toolchain metadata.
+# - Creates infra/runners/github/yocto/.env from .env.example if missing
+# - Sets RUST_VERSION from apps/rust-toolchain.toml if available
+runner-env-sync:
+  @ENV_FILE="{{RUNNER_ENV_FILE}}"; \
+    EXAMPLE="{{RUNNER_ENV_EXAMPLE}}"; \
+    TOOLCHAIN="{{RUST_TOOLCHAIN_FILE}}"; \
+    if [[ ! -f "$ENV_FILE" ]]; then \
+      cp "$EXAMPLE" "$ENV_FILE"; \
+      echo "Created $ENV_FILE from example"; \
+    fi; \
+    RUST_VER="$(awk -F'\"' '/^[[:space:]]*channel[[:space:]]*=[[:space:]]*\"/{print $2; exit}' "$TOOLCHAIN" 2>/dev/null || true)"; \
+    if [[ -n "$RUST_VER" ]]; then \
+      if grep -q '^RUST_VERSION=' "$ENV_FILE"; then \
+        sed -i "s/^RUST_VERSION=.*/RUST_VERSION=$RUST_VER/" "$ENV_FILE"; \
+      else \
+        echo "RUST_VERSION=$RUST_VER" >> "$ENV_FILE"; \
+      fi; \
+      echo "Set RUST_VERSION=$RUST_VER in $ENV_FILE"; \
+    else \
+      echo "WARN: could not parse Rust channel from $TOOLCHAIN"; \
+    fi
+
+# Validate runner env before booting the stack.
+runner-env-validate:
+  @ENV_FILE="{{RUNNER_ENV_FILE}}"; \
+    [[ -f "$ENV_FILE" ]] || { echo "missing $ENV_FILE (run just infra::runner-env-sync)" >&2; exit 1; }; \
+    RUNNER_PAT_VAL="$(awk -F= '/^RUNNER_PAT=/{print $2; exit}' "$ENV_FILE" || true)"; \
+    RUNNER_TOKEN_VAL="$(awk -F= '/^RUNNER_TOKEN=/{print $2; exit}' "$ENV_FILE" || true)"; \
+    RUNNER_REPO_VAL="$(awk -F= '/^RUNNER_REPO=/{print $2; exit}' "$ENV_FILE" || true)"; \
+    if [[ "$RUNNER_PAT_VAL" == "your_token_here" ]]; then RUNNER_PAT_VAL=""; fi; \
+    if [[ "$RUNNER_TOKEN_VAL" == "your_token_here" ]]; then RUNNER_TOKEN_VAL=""; fi; \
+    [[ -n "$RUNNER_REPO_VAL" ]] || { echo "RUNNER_REPO is required in $ENV_FILE (owner/repo or org)" >&2; exit 1; }; \
+    if [[ -z "$RUNNER_PAT_VAL" && -z "$RUNNER_TOKEN_VAL" ]]; then \
+      echo "Set RUNNER_PAT (recommended) or RUNNER_TOKEN in $ENV_FILE before starting the runner." >&2; \
+      exit 1; \
+    fi; \
+    echo "Runner env validation passed for $RUNNER_REPO_VAL"

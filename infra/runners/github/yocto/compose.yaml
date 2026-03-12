@@ -27,22 +27,26 @@ services:
       dockerfile: Containerfile
       target: ${RUNNER_TARGET:-runner}
       args:
-        RUNNER_VERSION: "2.321.0"
-        RUST_VERSION: "1.91.1"
-        KAS_VERSION: "4.8"
-    image: ghcr.io/backburnerlabs/yocto-runner:latest
-    container_name: yocto-runner
-    hostname: yocto-runner-01
+        UBUNTU_VERSION: ${UBUNTU_VERSION:-22.04}
+        RUNNER_VERSION: ${RUNNER_VERSION:-2.321.0}
+        RUST_VERSION: ${RUST_VERSION:-1.94.0}
+        KAS_VERSION: ${KAS_VERSION:-4.8}
+        INSTALL_RUST_TOOLS: ${INSTALL_RUST_TOOLS:-false}
+    image: ${RUNNER_IMAGE:-localhost/yocto-runner:latest}
+    container_name: ${RUNNER_CONTAINER_NAME:-yocto-runner}
+    hostname: ${RUNNER_HOSTNAME:-yocto-runner-01}
     restart: unless-stopped
     
     # Runner configuration via environment
     environment:
-      - RUNNER_REPO=BackburnerLabs/savers-aps
+      - RUNNER_REPO=${RUNNER_REPO:-BackburnerLabs/savers-aps}
       - RUNNER_PAT=${RUNNER_PAT:-}
       - RUNNER_TOKEN=${RUNNER_TOKEN:-}
       - RUNNER_NAME=${RUNNER_NAME:-yocto-runner-01}
       - RUNNER_LABELS=${RUNNER_LABELS:-yocto,kas,rust,self-hosted,linux,x64}
       - RUNNER_GROUP=${RUNNER_GROUP:-Default}
+      - RUNNER_RECONFIGURE=${RUNNER_RECONFIGURE:-false}
+      - RUNNER_REMOVE_ON_EXIT=${RUNNER_REMOVE_ON_EXIT:-false}
       # Yocto build parallelism (adjust based on host resources)
       - BB_NUMBER_THREADS=${BB_NUMBER_THREADS:-8}
       - PARALLEL_MAKE=${PARALLEL_MAKE:--j 8}
