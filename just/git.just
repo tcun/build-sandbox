@@ -114,6 +114,7 @@ cut tag:
     { print } \
   ' {{APPS_CARGO_TOML}} > {{APPS_CARGO_TOML}}.tmp; \
   mv {{APPS_CARGO_TOML}}.tmp {{APPS_CARGO_TOML}}; \
+  just --justfile {{ROOT_DIR}}/Justfile rust::check; \
   git -C {{ROOT_DIR}} add apps/Cargo.toml; \
   if [[ -f {{ROOT_DIR}}/apps/Cargo.lock ]]; then \
     git -C {{ROOT_DIR}} add apps/Cargo.lock; \
