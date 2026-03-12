@@ -2,6 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 mod rust "just/rust.just"
 mod yocto "just/yocto.just"
+mod qemu "just/qemu.just"
 mod git "just/git.just"
 mod ci "just/ci.just"
 mod infra "just/infra.just"
