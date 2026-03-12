@@ -47,10 +47,12 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            apps/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('apps/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-
+
+      - name: Clean Rust target dir
+        run: rm -rf apps/target
 
       - name: Run release pipeline
         run: just ci::release "${{ github.ref_name }}"
