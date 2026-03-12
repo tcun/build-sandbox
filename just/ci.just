@@ -15,6 +15,7 @@ preflight:
 # Full release pipeline for a tagged commit.
 release tag="":
   @cd {{ROOT_DIR}}; \
+    git fetch --force --tags origin "+refs/tags/*:refs/tags/*"; \
     just git::assert-tag-matches-workspace "{{tag}}"; \
     eval "$(just git::release-env "{{tag}}")"; \
     SOURCE_REV="$(git rev-parse HEAD)"; \
