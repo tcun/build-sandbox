@@ -1,0 +1,13 @@
+[workspace]
+resolver = "3"
+members = ["smoke-core"]
+
+[workspace.package]
+name = "build-sandbox"
+edition = "2024"
+version = "0.1.0"
+repository = "https://github.com/tcun/build-sandbox"
+license = "Proprietary"
+
+[workspace.metadata]
+ci = { docker-image = "rust:1.96" }

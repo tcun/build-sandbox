@@ -1,0 +1,484 @@
+name: Build Yocto Image
+
+on:
+  push:
+    tags:
+      # Dev builds: v1.0.0-dev, v1.0.0-rc1, v1.0.0-alpha, etc.
+      - 'v*-dev*'
+      - 'v*-rc*'
+      - 'v*-alpha*'
+      - 'v*-beta*'
+      # Prod builds: v1.0.0, v2.1.3, etc. (no suffix)
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+
+# Only allow one build at a time per branch to avoid cache conflicts
+concurrency:
+  group: yocto-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Cache paths (must match volume mounts in runner)
+  DL_DIR: /cache/downloads
+  SSTATE_DIR: /cache/sstate-cache
+  # KAS git reference directory - speeds up repo cloning by using local refs
+  KAS_REPO_REF_DIR: /cache/sources
+  # Local artifact storage (persistent volume on self-hosted runner)
+  ARTIFACT_ROOT: /srv/yocto-artifacts
+  TARGET_BOARD: stm32mp25-disco
+
+jobs:
+  build:
+    name: Build Yocto Image
+    runs-on: [self-hosted, yocto, kas]
+    timeout-minutes: 480  # 8 hours - full builds can take a while
+    outputs:
+      build_type: ${{ steps.config.outputs.build_type }}
+      build_dir: ${{ steps.config.outputs.build_dir }}
+      artifact_dir: ${{ steps.config.outputs.artifact_dir }}
+      version: ${{ steps.config.outputs.version }}
+      short_sha: ${{ steps.config.outputs.short_sha }}
+    
+    defaults:
+      run:
+        working-directory: bsp/yocto
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history needed for proper versioning
+          fetch-depth: 0
+          # Fetch LFS files if any
+          lfs: true
+
+      - name: Verify build environment
+        run: |
+          echo "=== Build Environment ==="
+          echo "Runner: $(hostname)"
+          echo "Kernel: $(uname -r)"
+          echo "Memory: $(free -h | grep Mem | awk '{print $2}')"
+          echo "Disk: $(df -h . | tail -1 | awk '{print $4}' ) available"
+          echo ""
+          echo "=== Tool Versions ==="
+          echo "KAS: $(kas --version)"
+          echo "Rust: $(rustc --version)"
+          echo "Cargo: $(cargo --version)"
+          echo "Python: $(python3 --version)"
+          echo "Git: $(git --version)"
+          echo ""
+          echo "=== Cache Status ==="
+          echo "Downloads: $(du -sh ${DL_DIR} 2>/dev/null || echo 'empty')"
+          echo "SState: $(du -sh ${SSTATE_DIR} 2>/dev/null || echo 'empty')"
+          echo "Sources: $(du -sh ${KAS_REPO_REF_DIR} 2>/dev/null || echo 'empty')"
+
+      - name: Determine build configuration
+        id: config
+        run: |
+          # Determine build type from tag or manual input
+          if [[ -n "${{ inputs.build_type }}" ]]; then
+            # Manual workflow dispatch
+            BUILD_TYPE="${{ inputs.build_type }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # Tag-based build - check if it's a dev/rc/alpha/beta tag
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            if [[ "${TAG_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              # Clean version tag (v1.0.0) = prod
+              BUILD_TYPE="prod"
+            else
+              # Has suffix (-dev, -rc1, -alpha, -beta) = dev
+              BUILD_TYPE="dev"
+            fi
+            echo "Detected tag: ${TAG_NAME} -> build_type: ${BUILD_TYPE}"
+          else
+            # PR or other trigger - default to dev
+            BUILD_TYPE="dev"
+          fi
+          
+          if [[ "${BUILD_TYPE}" == "prod" ]]; then
+            echo "build_dir=build/stm32mp25-prod" >> $GITHUB_OUTPUT
+          elif [[ "${BUILD_TYPE}" == "test" ]]; then
+            echo "build_dir=build/stm32mp25-test" >> $GITHUB_OUTPUT
+          else
+            echo "build_dir=build/stm32mp25-dev" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "build_type=${BUILD_TYPE}" >> $GITHUB_OUTPUT
+          
+          # Short SHA for artifact organization
+          SHORT_SHA="${GITHUB_SHA:0:8}"
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          
+          # Use tag name if available, otherwise short SHA
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="${SHORT_SHA}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+          # Artifact paths - use version for tag builds
+          ARTIFACT_DIR="${ARTIFACT_ROOT}/${BUILD_TYPE}/${TARGET_BOARD}/${VERSION}"
+          echo "artifact_dir=${ARTIFACT_DIR}" >> $GITHUB_OUTPUT
+
+      - name: Build Yocto image
+        run: |
+          BUILD_TYPE="${{ steps.config.outputs.build_type }}"
+          echo "Building with: ./deployment.sh build ${BUILD_TYPE}"
+          ./deployment.sh build "${BUILD_TYPE}"
+
+      - name: Collect build artifacts
+        if: success()
+        run: |
+          BUILD_DIR="${{ steps.config.outputs.build_dir }}"
+          
+          # Auto-detect the tmp directory (handles tmp-glibc, tmp-glibc-glibc, etc.)
+          TMP_DIR=$(find "${BUILD_DIR}" -maxdepth 1 -type d -name "tmp*" | head -1)
+          if [[ -z "${TMP_DIR}" ]]; then
+            echo "ERROR: No tmp directory found in ${BUILD_DIR}"
+            exit 1
+          fi
+          echo "Detected TMP_DIR: ${TMP_DIR}"
+          
+          DEPLOY_DIR="${TMP_DIR}/deploy/images/${TARGET_BOARD}"
+          KERNEL_DIR="${DEPLOY_DIR}/kernel"
+          
+          echo "=== Build Artifacts ==="
+          if [[ -d "${DEPLOY_DIR}" ]]; then
+            echo "Kernel Images (in kernel/):"
+            ls -lah "${KERNEL_DIR}"/Image* 2>/dev/null || echo "  (none found)"
+            echo ""
+            echo "Device Tree Blobs (in kernel/):"
+            ls -lah "${KERNEL_DIR}"/*.dtb 2>/dev/null || echo "  (none found)"
+            echo ""
+            echo "WIC Images:"
+            ls -lah "${DEPLOY_DIR}"/*.wic* 2>/dev/null || echo "  (none found)"
+            echo ""
+            echo "Vendorfs Tarballs:"
+            ls -lah "${DEPLOY_DIR}"/*.vendorfs.tar.* 2>/dev/null || echo "  (none found)"
+            echo ""
+            echo "Manifests:"
+            ls -lah "${DEPLOY_DIR}"/*.manifest 2>/dev/null || echo "  (none found)"
+          else
+            echo "Deploy directory not found: ${DEPLOY_DIR}"
+          fi
+          
+          echo ""
+          echo "=== IPK Packages ==="
+          IPK_DIR="${TMP_DIR}/deploy/ipk/cortexa35"
+          ls -lah "${IPK_DIR}"/tag-attach*.ipk 2>/dev/null || echo "  (none found)"
+
+      - name: Store artifacts locally
+        if: success() && github.event_name != 'pull_request'
+        run: |
+          BUILD_DIR="${{ steps.config.outputs.build_dir }}"
+          ARTIFACT_DIR="${{ steps.config.outputs.artifact_dir }}"
+          SHORT_SHA="${{ steps.config.outputs.short_sha }}"
+          
+          # Auto-detect the tmp directory (handles tmp-glibc, tmp-glibc-glibc, etc.)
+          TMP_DIR=$(find "${BUILD_DIR}" -maxdepth 1 -type d -name "tmp*" | head -1)
+          if [[ -z "${TMP_DIR}" ]]; then
+            echo "ERROR: No tmp directory found in ${BUILD_DIR}"
+            exit 1
+          fi
+          echo "Detected TMP_DIR: ${TMP_DIR}"
+          
+          DEPLOY_DIR="${TMP_DIR}/deploy/images/${TARGET_BOARD}"
+          KERNEL_DIR="${DEPLOY_DIR}/kernel"
+          IPK_DIR="${TMP_DIR}/deploy/ipk/cortexa35"
+          
+          echo "=== Storing artifacts to local volume ==="
+          echo "Artifact directory: ${ARTIFACT_DIR}"
+
+          # Ensure artifact root exists and is writable. On rootless Podman
+          # the named volume is mounted inside the runner container at /srv.
+          mkdir -p "${ARTIFACT_ROOT}"
+          
+          # Create artifact directory structure
+          mkdir -p "${ARTIFACT_DIR}/images"
+          mkdir -p "${ARTIFACT_DIR}/wic"
+          mkdir -p "${ARTIFACT_DIR}/ipk"
+          mkdir -p "${ARTIFACT_DIR}/manifests"
+          mkdir -p "${ARTIFACT_DIR}/build-info"
+          mkdir -p "${ARTIFACT_DIR}/checksums"
+          
+          # Copy netboot artifacts (kernel + device tree from kernel/ subdir)
+          echo "Copying netboot images..."
+          if [[ -f "${KERNEL_DIR}/Image" ]]; then
+            cp "${KERNEL_DIR}/Image" "${ARTIFACT_DIR}/images/"
+            echo "  ✓ Kernel Image"
+          fi
+          
+          # Copy all DTB files from kernel/ subdir
+          for dtb in "${KERNEL_DIR}"/*.dtb; do
+            if [[ -f "$dtb" ]]; then
+              cp "$dtb" "${ARTIFACT_DIR}/images/"
+              echo "  ✓ $(basename $dtb)"
+            fi
+          done
+          
+          # Copy WIC images (SD card flashable images)
+          echo "Copying WIC images..."
+          for wic in "${DEPLOY_DIR}"/*.wic*; do
+            if [[ -f "$wic" ]]; then
+              cp "$wic" "${ARTIFACT_DIR}/wic/"
+              echo "  ✓ $(basename $wic)"
+            fi
+          done
+          
+          # Copy IPK packages (tag-attach app)
+          echo "Copying IPK packages..."
+          for ipk in "${IPK_DIR}"/tag-attach*.ipk; do
+            if [[ -f "$ipk" ]]; then
+              cp "$ipk" "${ARTIFACT_DIR}/ipk/"
+              echo "  ✓ $(basename $ipk)"
+            fi
+          done
+          
+          # Copy rootfs tarball (for NFS root netboot)
+          echo "Copying rootfs for NFS..."
+          mkdir -p "${ARTIFACT_DIR}/rootfs"
+          for rootfs in "${DEPLOY_DIR}"/*.rootfs.tar.xz; do
+            if [[ -f "$rootfs" ]]; then
+              cp "$rootfs" "${ARTIFACT_DIR}/rootfs/"
+              echo "  ✓ $(basename $rootfs)"
+            fi
+          done
+
+          # Copy vendorfs tarball (for NFS netboot when ST_VENDORFS=1)
+          echo "Copying vendorfs for NFS..."
+          for vendorfs in "${DEPLOY_DIR}"/*.vendorfs.tar.*; do
+            if [[ -f "$vendorfs" ]]; then
+              cp "$vendorfs" "${ARTIFACT_DIR}/rootfs/"
+              echo "  ✓ $(basename $vendorfs)"
+            fi
+          done
+          
+          # Copy manifests
+          echo "Copying manifests..."
+          for manifest in "${DEPLOY_DIR}"/*.manifest; do
+            if [[ -f "$manifest" ]]; then
+              cp "$manifest" "${ARTIFACT_DIR}/manifests/"
+              echo "  ✓ $(basename $manifest)"
+            fi
+          done
+          
+          # Generate build info
+          echo "Generating build metadata..."
+          cat > "${ARTIFACT_DIR}/build-info/build.json" <<EOF
+          {
+            "commit": "${GITHUB_SHA}",
+            "short_sha": "${SHORT_SHA}",
+            "version": "${{ steps.config.outputs.version }}",
+            "branch": "${GITHUB_REF_NAME}",
+            "build_type": "${{ steps.config.outputs.build_type }}",
+            "target_board": "${TARGET_BOARD}",
+            "runner": "$(hostname)",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "workflow_run": "${GITHUB_RUN_ID}",
+            "workflow_url": "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          }
+          EOF
+          
+          # Copy build log snippets (last 500 lines of cooker log if exists)
+          COOKER_LOG="${BUILD_DIR}/tmp/log/cooker/${TARGET_BOARD}/console-latest.log"
+          if [[ -f "${COOKER_LOG}" ]]; then
+            tail -n 500 "${COOKER_LOG}" > "${ARTIFACT_DIR}/build-info/build-tail.log"
+            echo "  ✓ Build log tail (500 lines)"
+          fi
+          
+          # Generate checksums for all artifacts
+          echo "Generating checksums..."
+          (
+            cd "${ARTIFACT_DIR}"
+            find images rootfs wic ipk -type f 2>/dev/null | while read f; do
+              sha256sum "$f"
+            done > checksums/sha256sums.txt
+          )
+          echo "  ✓ SHA256 checksums generated"
+          
+          # Create 'latest' symlink for easy access
+          VERSION="${{ steps.config.outputs.version }}"
+          LATEST_LINK="${ARTIFACT_ROOT}/${{ steps.config.outputs.build_type }}/${TARGET_BOARD}/latest"
+          rm -f "${LATEST_LINK}"
+          ln -s "${VERSION}" "${LATEST_LINK}"
+          echo "  ✓ Updated 'latest' symlink -> ${VERSION}"
+          
+          # Show final artifact structure
+          echo ""
+          echo "=== Artifact Structure ==="
+          find "${ARTIFACT_DIR}" -type f -exec ls -lh {} \;
+          
+          echo ""
+          echo "=== Artifact URLs (when HTTP server is running) ==="
+          echo "  Images:     http://<runner-host>:8080/${{ steps.config.outputs.build_type }}/${TARGET_BOARD}/${VERSION}/images/"
+          echo "  Latest:     http://<runner-host>:8080/${{ steps.config.outputs.build_type }}/${TARGET_BOARD}/latest/images/"
+
+      # - name: Upload artifacts (GitHub)
+      #   if: success() && github.event_name != 'pull_request'
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: yocto-${{ steps.config.outputs.build_type }}-${{ github.sha }}
+      #     path: |
+      #       bsp/yocto/${{ steps.config.outputs.build_dir }}/tmp-glibc/deploy/images/stm32mp25-disco/*.wic*
+      #       bsp/yocto/${{ steps.config.outputs.build_dir }}/tmp-glibc/deploy/images/stm32mp25-disco/*.manifest
+      #     retention-days: 7
+      #     if-no-files-found: warn
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Yocto Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ steps.config.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Type | ${{ steps.config.outputs.build_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Dir | ${{ steps.config.outputs.build_dir }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runner | $(hostname) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Local artifact info
+          echo "### Local Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          ARTIFACT_DIR="${{ steps.config.outputs.artifact_dir }}"
+          if [[ -d "${ARTIFACT_DIR}" ]]; then
+            echo "| Path | Size |" >> $GITHUB_STEP_SUMMARY
+            echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Images | $(du -sh ${ARTIFACT_DIR}/images 2>/dev/null | cut -f1 || echo 'N/A') |" >> $GITHUB_STEP_SUMMARY
+            echo "| Rootfs | $(du -sh ${ARTIFACT_DIR}/rootfs 2>/dev/null | cut -f1 || echo 'N/A') |" >> $GITHUB_STEP_SUMMARY
+            echo "| WIC | $(du -sh ${ARTIFACT_DIR}/wic 2>/dev/null | cut -f1 || echo 'N/A') |" >> $GITHUB_STEP_SUMMARY
+            echo "| IPK | $(du -sh ${ARTIFACT_DIR}/ipk 2>/dev/null | cut -f1 || echo 'N/A') |" >> $GITHUB_STEP_SUMMARY
+            echo "| Manifests | $(du -sh ${ARTIFACT_DIR}/manifests 2>/dev/null | cut -f1 || echo 'N/A') |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Local URL:** \`http://<runner>:8080/${{ steps.config.outputs.build_type }}/${TARGET_BOARD}/${{ steps.config.outputs.version }}/\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "_Artifacts not stored (PR build or build failure)_" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Cache statistics
+          echo "### Cache Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Cache | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Downloads | $(du -sh ${DL_DIR} 2>/dev/null | cut -f1 || echo 'N/A') |" >> $GITHUB_STEP_SUMMARY
+          echo "| SState | $(du -sh ${SSTATE_DIR} 2>/dev/null | cut -f1 || echo 'N/A') |" >> $GITHUB_STEP_SUMMARY
+          echo "| Sources | $(du -sh ${KAS_REPO_REF_DIR} 2>/dev/null | cut -f1 || echo 'N/A') |" >> $GITHUB_STEP_SUMMARY
+
+  build_sdk:
+    name: Build Yocto SDK
+    if: needs.build.outputs.build_type == 'dev' || needs.build.outputs.build_type == 'test'
+    runs-on: [self-hosted, yocto, kas]
+    timeout-minutes: 480  # 8 hours - SDK build can take a while
+    needs: build
+
+    defaults:
+      run:
+        working-directory: bsp/yocto
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Verify build environment
+        run: |
+          echo "=== Build Environment ==="
+          echo "Runner: $(hostname)"
+          echo "Kernel: $(uname -r)"
+          echo "Memory: $(free -h | grep Mem | awk '{print $2}')"
+          echo "Disk: $(df -h . | tail -1 | awk '{print $4}' ) available"
+          echo ""
+          echo "=== Tool Versions ==="
+          echo "KAS: $(kas --version)"
+          echo "Rust: $(rustc --version)"
+          echo "Cargo: $(cargo --version)"
+          echo "Python: $(python3 --version)"
+          echo "Git: $(git --version)"
+          echo ""
+          echo "=== Cache Status ==="
+          echo "Downloads: $(du -sh ${DL_DIR} 2>/dev/null || echo 'empty')"
+          echo "SState: $(du -sh ${SSTATE_DIR} 2>/dev/null || echo 'empty')"
+          echo "Sources: $(du -sh ${KAS_REPO_REF_DIR} 2>/dev/null || echo 'empty')"
+
+      - name: Build Yocto SDK
+        run: |
+          BUILD_TYPE="${{ needs.build.outputs.build_type }}"
+          echo "Building SDK with: ./deployment.sh build-sdk ${BUILD_TYPE}"
+          ./deployment.sh build-sdk "${BUILD_TYPE}"
+
+      - name: Store SDK artifacts locally
+        if: success() && github.event_name != 'pull_request'
+        run: |
+          BUILD_DIR="${{ needs.build.outputs.build_dir }}"
+          ARTIFACT_DIR="${{ needs.build.outputs.artifact_dir }}"
+
+          # Auto-detect the tmp directory (handles tmp-glibc, tmp-glibc-glibc, etc.)
+          TMP_DIR=$(find "${BUILD_DIR}" -maxdepth 1 -type d -name "tmp*" | head -1)
+          if [[ -z "${TMP_DIR}" ]]; then
+            echo "ERROR: No tmp directory found in ${BUILD_DIR}"
+            exit 1
+          fi
+          echo "Detected TMP_DIR: ${TMP_DIR}"
+
+          SDK_DIR="${TMP_DIR}/deploy/sdk"
+
+          echo "=== Storing SDK artifacts to local volume ==="
+          echo "Artifact directory: ${ARTIFACT_DIR}"
+
+          # Ensure artifact root exists and is writable. On rootless Podman
+          # the named volume is mounted inside the runner container at /srv.
+          mkdir -p "${ARTIFACT_ROOT}"
+
+          # Create SDK artifact directory
+          mkdir -p "${ARTIFACT_DIR}/sdk"
+
+          if [[ -d "${SDK_DIR}" ]]; then
+            echo "Copying SDK installers..."
+            find "${SDK_DIR}" -maxdepth 1 -type f -exec cp {} "${ARTIFACT_DIR}/sdk/" \;
+            ls -lah "${ARTIFACT_DIR}/sdk/" || true
+          else
+            echo "SDK deploy directory not found: ${SDK_DIR}"
+            exit 1
+          fi
+
+      - name: SDK build summary
+        if: always()
+        run: |
+          echo "## Yocto SDK Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.build.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Type | ${{ needs.build.outputs.build_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Dir | ${{ needs.build.outputs.build_dir }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runner | $(hostname) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          ARTIFACT_DIR="${{ needs.build.outputs.artifact_dir }}"
+          if [[ -d "${ARTIFACT_DIR}/sdk" ]]; then
+            echo "### Local SDK Artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Path | Size |" >> $GITHUB_STEP_SUMMARY
+            echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+            echo "| SDK | $(du -sh ${ARTIFACT_DIR}/sdk 2>/dev/null | cut -f1 || echo 'N/A') |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Local URL:** \`http://<runner>:8080/${{ needs.build.outputs.build_type }}/${TARGET_BOARD}/${{ needs.build.outputs.version }}/sdk/\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "_SDK artifacts not stored (PR build or build failure)_" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,106 @@
+# GitHub Actions Runner Deployment with Podman
+#
+# This compose file deploys the Yocto build runner with persistent caches.
+#
+# Quick start:
+#   1. Create a long-lived GitHub token (recommended) and put it in .env:
+#      echo "RUNNER_PAT=<your-token>" > .env
+#
+#      If you prefer a short-lived runner registration token (expires quickly):
+#      https://github.com/BackburnerLabs/savers-aps/settings/actions/runners/new
+#      echo "RUNNER_TOKEN=<your-token>" > .env
+#
+#   3. Build and start:
+#      podman-compose up -d --build
+#
+#   4. Check logs:
+#      podman-compose logs -f
+#
+# For multiple runners, scale with:
+#   podman-compose up -d --scale yocto-runner=3
+
+services:
+  yocto-runner:
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        RUNNER_VERSION: "2.321.0"
+        RUST_VERSION: "1.91.1"
+    image: ghcr.io/backburnerlabs/yocto-runner:latest
+    container_name: yocto-runner
+    hostname: yocto-runner-01
+    restart: unless-stopped
+    
+    # Runner configuration via environment
+    environment:
+      - RUNNER_REPO=BackburnerLabs/savers-aps
+      - RUNNER_PAT=${RUNNER_PAT:-}
+      - RUNNER_TOKEN=${RUNNER_TOKEN:-}
+      - RUNNER_NAME=${RUNNER_NAME:-yocto-runner-01}
+      - RUNNER_LABELS=${RUNNER_LABELS:-yocto,kas,rust,self-hosted,linux,x64}
+      - RUNNER_GROUP=${RUNNER_GROUP:-Default}
+      # Yocto build parallelism (adjust based on host resources)
+      - BB_NUMBER_THREADS=${BB_NUMBER_THREADS:-8}
+      - PARALLEL_MAKE=${PARALLEL_MAKE:--j 8}
+
+    # Persistent volumes for build caches
+    # These dramatically speed up subsequent builds
+    volumes:
+      # Yocto download cache (source tarballs, ~20-50GB)
+      - yocto-downloads:/cache/downloads:Z
+      # Yocto shared state cache (build artifacts, ~50-100GB)
+      - yocto-sstate:/cache/sstate-cache:Z
+      # Runner work directory (checkout + build, ~100GB+)
+      - yocto-workdir:/home/runner/work:Z
+      # Local artifact storage for dev builds (accessible via HTTP server)
+      - yocto-artifacts:/srv/yocto-artifacts:Z
+
+    # Resource limits - Yocto builds are resource-intensive
+    # Adjust these based on your host system
+    deploy:
+      resources:
+        limits:
+          # Recommend 16GB+ for full image builds
+          memory: 32G
+        reservations:
+          memory: 8G
+
+    # Security: run rootless where possible
+    security_opt:
+      - label=disable
+    
+    # Increase ulimits for large builds
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      nproc:
+        soft: 65536
+        hard: 65536
+
+  # Lightweight HTTP server for serving build artifacts locally
+  # Access artifacts at: http://localhost:8080/dev/stm32mp25-disco/<sha>/
+  artifact-server:
+    image: docker.io/library/caddy:2-alpine
+    container_name: artifact-server
+    hostname: artifact-server
+    restart: unless-stopped
+    ports:
+      # Bind to all interfaces so it's reachable on the LAN
+      - "0.0.0.0:8080:80"
+    volumes:
+      - yocto-artifacts:/srv:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  command: caddy file-server --root /srv --browse --listen :80
+
+volumes:
+  # Named volumes for persistent storage
+  yocto-downloads:
+    name: yocto-downloads
+  yocto-sstate:
+    name: yocto-sstate
+  yocto-workdir:
+    name: yocto-workdir
+  yocto-artifacts:
+    name: yocto-artifacts

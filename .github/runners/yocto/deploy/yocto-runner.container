@@ -1,0 +1,51 @@
+# Podman Quadlet unit file for GitHub Actions Runner
+# 
+# Installation:
+#   1. Copy to: ~/.config/containers/systemd/yocto-runner.container
+#      (for rootless) or /etc/containers/systemd/ (for root)
+#   2. Run: systemctl --user daemon-reload
+#   3. Run: systemctl --user start yocto-runner.service
+#
+# The container will auto-start on boot and restart on failure.
+
+[Unit]
+Description=GitHub Actions Runner for Yocto Builds
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+# Image can be pulled from registry or built locally
+Image=localhost/yocto-runner:latest
+ContainerName=yocto-runner
+
+# Runner configuration - use environment file for secrets
+EnvironmentFile=%h/.config/yocto-runner/env
+
+# Persistent volumes for build caches
+Volume=yocto-downloads:/cache/downloads:Z
+Volume=yocto-sstate:/cache/sstate-cache:Z
+Volume=yocto-sources:/cache/sources:Z
+Volume=yocto-workdir:/home/runner/work:Z
+# Local artifact storage for dev builds
+# Mount at /srv (same as artifact-server) so we can create/manage subdirs as the
+# unprivileged 'runner' user without needing to chown the volume root.
+Volume=yocto-artifacts:/srv:Z
+
+# Resource limits
+PodmanArgs=--memory=32g
+PodmanArgs=--cpus=12
+
+# Increase file descriptor limits for Yocto builds
+PodmanArgs=--ulimit=nofile=65536:65536
+
+# Labels for identification
+Label=app=yocto-runner
+
+[Service]
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,29 @@
+# Caddy configuration for Yocto artifact server
+# Serves build artifacts with directory browsing enabled
+#
+# Access at: http://localhost:8080/
+
+:80 {
+    root * /srv
+    
+    # Enable directory browsing
+    file_server browse
+    
+    # Set appropriate headers for artifact downloads
+    header {
+        # Allow CORS for local development tools
+        Access-Control-Allow-Origin *
+        # Disable caching for latest symlinks
+        Cache-Control "no-cache, no-store, must-revalidate"
+    }
+    
+    # Serve build-info JSON with correct content type
+    @json path *.json
+    header @json Content-Type application/json
+    
+    # Log access for debugging
+    log {
+        output stdout
+        format console
+    }
+}
