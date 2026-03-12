@@ -10,9 +10,10 @@ PV = "${@d.getVar('VERSION') or '0.1.0-alpha'}"
 # - SOURCE_REV pins an exact commit (set by CI release flow)
 SOURCE_REPO ?= "github.com/tcun/build-sandbox.git"
 SOURCE_BRANCH ?= "main"
+SOURCE_PROTOCOL ?= "https"
 SOURCE_REV ?= ""
 
-SRC_URI = "git://${SOURCE_REPO};protocol=https;branch=${SOURCE_BRANCH}"
+SRC_URI = "git://${SOURCE_REPO};protocol=${SOURCE_PROTOCOL};branch=${SOURCE_BRANCH}"
 SRCREV = "${@d.getVar('SOURCE_REV') if d.getVar('SOURCE_REV') else d.getVar('AUTOREV')}"
 S = "${WORKDIR}/git"
 
