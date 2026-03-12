@@ -3,11 +3,22 @@ resolver = "3"
 members = ["smoke-core"]
 
 [workspace.package]
-name = "build-sandbox"
 edition = "2024"
 version = "0.1.0"
 repository = "https://github.com/tcun/build-sandbox"
 license = "Proprietary"
+rust-version = "1.94"
 
-[workspace.metadata]
-ci = { docker-image = "rust:1.96" }
+[profile.dev]
+debug = true
+incremental = true
+
+[profile.test]
+debug = true
+incremental = true
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

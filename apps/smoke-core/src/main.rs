@@ -1,3 +1,3 @@
 fn main() {
-    println!("Smoke Test");
+    println!("Smoke-core is running!");
 }
