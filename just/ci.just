@@ -17,7 +17,9 @@ release tag="":
   @cd {{ROOT_DIR}}; \
     just git::assert-tag-matches-workspace "{{tag}}"; \
     eval "$(just git::release-env "{{tag}}")"; \
+    SOURCE_REV="$(git rev-parse HEAD)"; \
     echo "VERSION=$VERSION"; \
     echo "BUILD_VERSION=$BUILD_VERSION"; \
+    echo "SOURCE_REV=$SOURCE_REV"; \
     just rust::ci; \
-    VERSION="$VERSION" BUILD_VERSION="$BUILD_VERSION" just yocto::build variant=release
+    VERSION="$VERSION" BUILD_VERSION="$BUILD_VERSION" SOURCE_REV="$SOURCE_REV" just yocto::build variant=release

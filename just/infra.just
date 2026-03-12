@@ -75,3 +75,48 @@ logs stack="" tail="200" follow="false":
       just --justfile {{ROOT_DIR}}/Justfile infra::stack-logs stack="{{DEFAULT_RUNNER_STACK}}" tail="{{tail}}" follow="{{follow}}"; \
       just --justfile {{ROOT_DIR}}/Justfile infra::stack-logs stack="{{DEFAULT_ARTIFACT_STACK}}" tail="{{tail}}" follow="{{follow}}"; \
     fi
+
+# Publish local Yocto deploy artifacts into the shared artifact volume.
+# This keeps local/manual builds discoverable from the same artifact server.
+# Example: just infra::artifact-publish
+# Example: just infra::artifact-publish qemux86-64 dev mybuild
+artifact-publish machine="qemux86-64" variant="dev" label="" src_dir="":
+  @SOURCE_DIR="{{src_dir}}"; \
+    if [[ -z "$SOURCE_DIR" ]]; then \
+      SOURCE_DIR="{{ROOT_DIR}}/build/yocto/build/{{machine}}-{{variant}}/tmp/deploy/images/{{machine}}"; \
+    fi; \
+    [[ -d "$SOURCE_DIR" ]] || { echo "missing source artifacts dir: $SOURCE_DIR" >&2; exit 1; }; \
+    TAG="{{label}}"; \
+    if [[ -z "$TAG" ]]; then TAG="$(date -u +%Y%m%d%H%M%S)"; fi; \
+    VOLUME_NAME="yocto-artifacts"; \
+    podman volume create "$VOLUME_NAME" >/dev/null; \
+    MOUNTPOINT="$(podman volume inspect "$VOLUME_NAME" --format '{{ "{{" }} .Mountpoint {{ "}}" }}')"; \
+    DEST_DIR="$MOUNTPOINT/local/{{variant}}/{{machine}}/$TAG"; \
+    mkdir -p "$DEST_DIR"; \
+    cp -a "$SOURCE_DIR"/. "$DEST_DIR"/; \
+    ln -sfn "$TAG" "$MOUNTPOINT/local/{{variant}}/{{machine}}/latest"; \
+    echo "Published: $DEST_DIR"; \
+    echo "URL: http://localhost:8080/local/{{variant}}/{{machine}}/$TAG/"
+
+# Print URL helper for published artifacts.
+artifact-url variant="dev" machine="qemux86-64" label="latest" host="localhost:8080":
+  @echo "http://{{host}}/local/{{variant}}/{{machine}}/{{label}}/"
+
+# Convenience aliases for default runner/artifact stacks.
+runner-up:
+  @just --justfile {{ROOT_DIR}}/Justfile infra::up "runners/github/yocto" "true"
+
+runner-down:
+  @just --justfile {{ROOT_DIR}}/Justfile infra::down "runners/github/yocto"
+
+runner-logs tail="200" follow="false":
+  @just --justfile {{ROOT_DIR}}/Justfile infra::logs "runners/github/yocto" "{{tail}}" "{{follow}}"
+
+artifact-up:
+  @just --justfile {{ROOT_DIR}}/Justfile infra::up "services/artifact-server" "false"
+
+artifact-down:
+  @just --justfile {{ROOT_DIR}}/Justfile infra::down "services/artifact-server"
+
+artifact-logs tail="200" follow="false":
+  @just --justfile {{ROOT_DIR}}/Justfile infra::logs "services/artifact-server" "{{tail}}" "{{follow}}"

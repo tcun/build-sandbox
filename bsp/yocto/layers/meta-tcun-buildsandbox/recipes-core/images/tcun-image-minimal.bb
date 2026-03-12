@@ -8,5 +8,6 @@ IMAGE_FEATURES += "ssh-server-openssh"
 
 IMAGE_INSTALL = " \
     packagegroup-core-boot \
+    smoke-core \
     ${CORE_IMAGE_EXTRA_INSTALL} \
 "

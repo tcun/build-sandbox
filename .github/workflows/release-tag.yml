@@ -44,3 +44,42 @@ jobs:
 
       - name: Run release pipeline
         run: just ci::release "${{ github.ref_name }}"
+
+      - name: Publish to local artifact server volume (best effort)
+        if: success()
+        continue-on-error: true
+        run: |
+          if command -v podman >/dev/null 2>&1; then
+            just infra::artifact-publish qemux86-64 release "${{ github.ref_name }}"
+            URL="$(just infra::artifact-url release qemux86-64 "${{ github.ref_name }}")"
+            {
+              echo "### Local Artifact Publish"
+              echo ""
+              echo "- Published to local podman volume: \`yocto-artifacts\`"
+              echo "- URL: ${URL}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Podman not available on this runner; skipping local artifact volume publish."
+          fi
+
+      - name: Upload release artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}-artifacts
+          path: |
+            build/yocto/build/qemux86-64-release/tmp/deploy/images/qemux86-64/**
+            apps/target/release/smoke-core
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Yocto failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}-yocto-logs
+          path: |
+            build/yocto/build/qemux86-64-release/tmp/work/**/temp/log.do_*
+            build/yocto/build/qemux86-64-release/bitbake-cookerdaemon.log
+          if-no-files-found: ignore
+          retention-days: 7

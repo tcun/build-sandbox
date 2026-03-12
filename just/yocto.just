@@ -19,8 +19,12 @@ build machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
   BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
   TAR_OPTIONS_VALUE="${TAR_OPTIONS:---no-same-owner}"; \
+  SOURCE_REPO_VALUE="${SOURCE_REPO:-github.com/tcun/build-sandbox.git}"; \
+  SOURCE_BRANCH_VALUE="${SOURCE_BRANCH:-main}"; \
+  SOURCE_REV_VALUE="${SOURCE_REV:-}"; \
   BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
   export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE" TAR_OPTIONS="$TAR_OPTIONS_VALUE"; \
+  export SOURCE_REPO="$SOURCE_REPO_VALUE" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV_VALUE"; \
   export KAS_BUILD_DIR="$BUILD_DIR"; \
   mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas build \
@@ -30,8 +34,12 @@ shell machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
   BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
   TAR_OPTIONS_VALUE="${TAR_OPTIONS:---no-same-owner}"; \
+  SOURCE_REPO_VALUE="${SOURCE_REPO:-github.com/tcun/build-sandbox.git}"; \
+  SOURCE_BRANCH_VALUE="${SOURCE_BRANCH:-main}"; \
+  SOURCE_REV_VALUE="${SOURCE_REV:-}"; \
   BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
   export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE" TAR_OPTIONS="$TAR_OPTIONS_VALUE"; \
+  export SOURCE_REPO="$SOURCE_REPO_VALUE" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV_VALUE"; \
   export KAS_BUILD_DIR="$BUILD_DIR"; \
   mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas shell \
@@ -41,8 +49,12 @@ run machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
   BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
   TAR_OPTIONS_VALUE="${TAR_OPTIONS:---no-same-owner}"; \
+  SOURCE_REPO_VALUE="${SOURCE_REPO:-github.com/tcun/build-sandbox.git}"; \
+  SOURCE_BRANCH_VALUE="${SOURCE_BRANCH:-main}"; \
+  SOURCE_REV_VALUE="${SOURCE_REV:-}"; \
   BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
   export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE" TAR_OPTIONS="$TAR_OPTIONS_VALUE"; \
+  export SOURCE_REPO="$SOURCE_REPO_VALUE" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV_VALUE"; \
   export KAS_BUILD_DIR="$BUILD_DIR"; \
   mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas shell --command "runqemu {{machine}} nographic" \
@@ -52,8 +64,12 @@ fetch machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
   BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
   TAR_OPTIONS_VALUE="${TAR_OPTIONS:---no-same-owner}"; \
+  SOURCE_REPO_VALUE="${SOURCE_REPO:-github.com/tcun/build-sandbox.git}"; \
+  SOURCE_BRANCH_VALUE="${SOURCE_BRANCH:-main}"; \
+  SOURCE_REV_VALUE="${SOURCE_REV:-}"; \
   BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
   export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE" TAR_OPTIONS="$TAR_OPTIONS_VALUE"; \
+  export SOURCE_REPO="$SOURCE_REPO_VALUE" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV_VALUE"; \
   export KAS_BUILD_DIR="$BUILD_DIR"; \
   mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas shell --command "bitbake -p" \
@@ -86,3 +102,6 @@ print-config machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE
   @echo "VERSION=${VERSION:-0.1.0-alpha}"
   @echo "BUILD_VERSION=${BUILD_VERSION:-${VERSION:-0.1.0-alpha}}"
   @echo "TAR_OPTIONS=${TAR_OPTIONS:---no-same-owner}"
+  @echo "SOURCE_REPO=${SOURCE_REPO:-github.com/tcun/build-sandbox.git}"
+  @echo "SOURCE_BRANCH=${SOURCE_BRANCH:-main}"
+  @echo "SOURCE_REV=${SOURCE_REV:-}"

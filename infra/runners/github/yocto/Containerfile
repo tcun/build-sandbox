@@ -190,8 +190,6 @@ RUN python3 -m pip install --no-cache-dir pipx && \
 
 ENV DL_DIR=/cache/downloads
 ENV SSTATE_DIR=/cache/sstate-cache
-ENV BB_NUMBER_THREADS=auto
-ENV PARALLEL_MAKE="-j auto"
 
 USER runner
 WORKDIR /home/runner/actions-runner

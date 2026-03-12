@@ -9,6 +9,8 @@ RUNNER_NAME="${RUNNER_NAME:-$(hostname)}"
 RUNNER_LABELS="${RUNNER_LABELS:-yocto,kas,rust,self-hosted}"
 RUNNER_WORKDIR="${RUNNER_WORKDIR:-/home/runner/work}"
 RUNNER_GROUP="${RUNNER_GROUP:-Default}"
+RUNNER_RECONFIGURE="${RUNNER_RECONFIGURE:-false}"
+RUNNER_REMOVE_ON_EXIT="${RUNNER_REMOVE_ON_EXIT:-false}"
 
 # Optional: allow GitHub Enterprise
 GITHUB_URL="${GITHUB_URL:-https://github.com}"
@@ -61,6 +63,33 @@ fetch_registration_token() {
     export RUNNER_TOKEN
 }
 
+fetch_remove_token() {
+    local endpoint
+
+    if [[ -z "${RUNNER_PAT}" ]]; then
+        return 1
+    fi
+
+    if [[ "${RUNNER_REPO}" == */* ]]; then
+        endpoint="${GITHUB_API_URL}/repos/${RUNNER_REPO}/actions/runners/remove-token"
+    else
+        endpoint="${GITHUB_API_URL}/orgs/${RUNNER_REPO}/actions/runners/remove-token"
+    fi
+
+    local response
+    response="$(curl -fsSL \
+        -X POST \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        -H "Authorization: Bearer ${RUNNER_PAT}" \
+        "${endpoint}")" || return 2
+
+    local token
+    token="$(echo "${response}" | jq -r '.token // empty')"
+    [[ -n "${token}" ]] || return 3
+    echo "${token}"
+}
+
 # Validate required environment variables
 if [[ -z "${RUNNER_REPO}" ]]; then
     echo "ERROR: RUNNER_REPO environment variable is required"
@@ -68,47 +97,67 @@ if [[ -z "${RUNNER_REPO}" ]]; then
     exit 1
 fi
 
-# If a registration token isn't provided, try minting one from a long-lived token.
-if [[ -z "${RUNNER_TOKEN}" ]]; then
-    if [[ -n "${RUNNER_PAT}" ]]; then
-        fetch_registration_token
-    fi
-fi
-
-if [[ -z "${RUNNER_TOKEN}" ]]; then
-    echo "ERROR: A runner registration token is required."
-    echo "       Provide either:" 
-    echo "         - RUNNER_TOKEN (short-lived; expires quickly)" 
-    echo "         - RUNNER_PAT (long-lived token used to mint RUNNER_TOKEN automatically)" 
-    echo "" 
-    echo "       Manual token generation: ${GITHUB_URL}/${RUNNER_REPO}/settings/actions/runners/new" 
-    exit 1
-fi
-
 cd /home/runner/actions-runner
 
-# Remove any existing runner configuration
+need_registration=false
 if [[ -f ".runner" ]]; then
-    echo "Removing existing runner configuration..."
-    ./config.sh remove --token "${RUNNER_TOKEN}" || true
+    if [[ "${RUNNER_RECONFIGURE}" == "true" ]]; then
+        echo "Reconfigure requested: removing existing runner configuration..."
+        REMOVE_TOKEN="$(fetch_remove_token || true)"
+        if [[ -n "${REMOVE_TOKEN}" ]]; then
+            ./config.sh remove --token "${REMOVE_TOKEN}" || true
+        else
+            echo "WARN: unable to fetch remove token; proceeding with local cleanup only" >&2
+            rm -f .runner .credentials .credentials_rsaparams || true
+        fi
+        need_registration=true
+    else
+        echo "Existing runner config found; reusing local credentials."
+    fi
+else
+    need_registration=true
 fi
 
-# Configure the runner
-echo "Configuring GitHub Actions runner..."
-./config.sh \
-    --url "${GITHUB_URL}/${RUNNER_REPO}" \
-    --token "${RUNNER_TOKEN}" \
-    --name "${RUNNER_NAME}" \
-    --labels "${RUNNER_LABELS}" \
-    --work "${RUNNER_WORKDIR}" \
-    --runnergroup "${RUNNER_GROUP}" \
-    --unattended \
-    --replace
+if [[ "${need_registration}" == "true" ]]; then
+    if [[ -z "${RUNNER_TOKEN}" && -n "${RUNNER_PAT}" ]]; then
+        fetch_registration_token
+    fi
+
+    if [[ -z "${RUNNER_TOKEN}" ]]; then
+        echo "ERROR: A runner registration token is required for first-time registration."
+        echo "       Provide either:"
+        echo "         - RUNNER_TOKEN (short-lived; expires quickly)"
+        echo "         - RUNNER_PAT (long-lived token used to mint RUNNER_TOKEN automatically)"
+        echo ""
+        echo "       Manual token generation: ${GITHUB_URL}/${RUNNER_REPO}/settings/actions/runners/new"
+        exit 1
+    fi
+
+    echo "Configuring GitHub Actions runner..."
+    ./config.sh \
+        --url "${GITHUB_URL}/${RUNNER_REPO}" \
+        --token "${RUNNER_TOKEN}" \
+        --name "${RUNNER_NAME}" \
+        --labels "${RUNNER_LABELS}" \
+        --work "${RUNNER_WORKDIR}" \
+        --runnergroup "${RUNNER_GROUP}" \
+        --unattended \
+        --replace
+fi
 
 # Cleanup function for graceful shutdown
 cleanup() {
-    echo "Received shutdown signal, removing runner..."
-    ./config.sh remove --token "${RUNNER_TOKEN}" || true
+    if [[ "${RUNNER_REMOVE_ON_EXIT}" == "true" ]]; then
+        echo "Received shutdown signal, removing runner registration..."
+        REMOVE_TOKEN="$(fetch_remove_token || true)"
+        if [[ -n "${REMOVE_TOKEN}" ]]; then
+            ./config.sh remove --token "${REMOVE_TOKEN}" || true
+        else
+            echo "WARN: unable to fetch remove token during shutdown; leaving registration in GitHub." >&2
+        fi
+    else
+        echo "Received shutdown signal, keeping runner registration (RUNNER_REMOVE_ON_EXIT=false)."
+    fi
     exit 0
 }
 

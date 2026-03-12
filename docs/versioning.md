@@ -160,6 +160,7 @@ Recommended pattern:
 
 - pass the version from CI or the calling shell into kas/bitbake explicitly
 - set recipe `PV` from that passed-in version
+- pin application source with a CI-provided commit SHA (for example `SOURCE_REV`)
 - avoid hard-coding release versions in recipes
 
 Example:
@@ -169,6 +170,11 @@ PV = "${@d.getVar('VERSION') or '0.1.0-alpha'}"
 ```
 
 If version variables are passed through the environment, do it explicitly in kas/local configuration rather than relying on implicit shell inheritance.
+
+For immutable release builds, ensure:
+
+1. tag version matches workspace version
+2. Yocto app recipes build from an explicit commit SHA (not a live working tree)
 
 ## CI Guidance
 

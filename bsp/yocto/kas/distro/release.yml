@@ -4,3 +4,4 @@ header:
 local_conf_header:
   distro: |
     DISTRO = "poky"
+    TCUN_BUILD_FLAVOR = "release"
