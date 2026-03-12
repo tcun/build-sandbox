@@ -1,0 +1,7 @@
+header:
+  version: 14
+
+local_conf_header:
+  distro: |
+    DISTRO = "poky"
+    EXTRA_IMAGE_FEATURES:append = " debug-tweaks"
