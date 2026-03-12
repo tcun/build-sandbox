@@ -115,6 +115,9 @@ cut tag:
   ' {{APPS_CARGO_TOML}} > {{APPS_CARGO_TOML}}.tmp; \
   mv {{APPS_CARGO_TOML}}.tmp {{APPS_CARGO_TOML}}; \
   git -C {{ROOT_DIR}} add apps/Cargo.toml; \
+  if [[ -f {{ROOT_DIR}}/apps/Cargo.lock ]]; then \
+    git -C {{ROOT_DIR}} add apps/Cargo.lock; \
+  fi; \
   if git -C {{ROOT_DIR}} diff --cached --quiet; then \
     echo "info: workspace version already '$VERSION'"; \
   else \

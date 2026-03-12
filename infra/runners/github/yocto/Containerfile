@@ -212,10 +212,13 @@ WORKDIR /home/runner/actions-runner
 FROM runner-core AS runner-rust
 
 COPY --from=rust-builder /opt/rust /opt/rust
+USER root
+RUN chown -R runner:runner /opt/rust
 
 ENV RUSTUP_HOME=/opt/rust/rustup
 ENV CARGO_HOME=/opt/rust/cargo
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
+USER runner
 
 # =============================================================================
 # Stage 6: Combined Yocto + Rust (default)
@@ -223,10 +226,13 @@ ENV PATH="${CARGO_HOME}/bin:${PATH}"
 FROM runner-yocto AS runner-yocto-rust
 
 COPY --from=rust-builder /opt/rust /opt/rust
+USER root
+RUN chown -R runner:runner /opt/rust
 
 ENV RUSTUP_HOME=/opt/rust/rustup
 ENV CARGO_HOME=/opt/rust/cargo
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
+USER runner
 
 # Keep backward-compatible stage name for existing build scripts.
 FROM runner-yocto-rust AS runner
