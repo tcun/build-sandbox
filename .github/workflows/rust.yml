@@ -38,10 +38,15 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo and target
-        uses: Swatinem/rust-cache@v2
+        uses: actions/cache@v4
         with:
-          workspaces: |
-            apps -> target
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Run preflight workflow
         run: just ci::preflight

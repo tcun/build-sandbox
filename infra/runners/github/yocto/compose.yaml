@@ -28,7 +28,7 @@ services:
       target: ${RUNNER_TARGET:-runner}
       args:
         UBUNTU_VERSION: ${UBUNTU_VERSION:-22.04}
-        RUNNER_VERSION: ${RUNNER_VERSION:-2.321.0}
+        RUNNER_VERSION: ${RUNNER_VERSION:-2.332.0}
         RUST_VERSION: ${RUST_VERSION:-1.94.0}
         KAS_VERSION: ${KAS_VERSION:-4.8}
         INSTALL_RUST_TOOLS: ${INSTALL_RUST_TOOLS:-false}

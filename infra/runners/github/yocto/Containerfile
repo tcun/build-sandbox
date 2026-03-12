@@ -13,7 +13,7 @@
 #   podman build -f Containerfile -t ghcr.io/backburnerlabs/yocto-runner:latest .
 
 ARG UBUNTU_VERSION=22.04
-ARG RUNNER_VERSION=2.321.0
+ARG RUNNER_VERSION=2.332.0
 ARG RUST_VERSION=1.94.0
 ARG KAS_VERSION=4.8
 ARG INSTALL_RUST_TOOLS=false
