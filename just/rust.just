@@ -1,11 +1,6 @@
 ROOT_DIR := justfile_directory()
 APPS_DIR := ROOT_DIR + "/apps"
 
-# Developer tooling
-setup-dev-tools:
-  cargo install --locked just
-  cargo install --locked just-lsp --version 0.3.4
-
 # Versions / environment
 status:
   cd {{APPS_DIR}} && rustc --version

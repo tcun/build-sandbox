@@ -1,3 +1,0 @@
-# Runner secrets - NEVER commit these
-.env
-*.env.local
