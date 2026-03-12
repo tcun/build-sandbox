@@ -1,4 +1,3 @@
-# Use bash so recipe-local variables behave predictably
 set shell := ["bash", "-cu"]
 
 KAS_DIR := justfile_directory() / "bsp/yocto/kas"
@@ -16,51 +15,55 @@ DEFAULT_IMAGE := "minimal"
 export KAS_WORK_DIR := justfile_directory()
 export KAS_REPO_REF_DIR := KAS_SOURCES_DIR
 
-# Build the selected image/config
 build machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
-  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"
-  export KAS_BUILD_DIR="$BUILD_DIR"
-  mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"
+  VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
+  BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
+  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE"; \
+  export KAS_BUILD_DIR="$BUILD_DIR"; \
+  mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas build \
     {{KAS_BASE}}:{{KAS_DIR}}/machine/{{machine}}.yml:{{KAS_DIR}}/distro/{{variant}}.yml:{{KAS_DIR}}/images/{{image}}.yml
 
-# Open an interactive kas/bitbake shell
 shell machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
-  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"
-  export KAS_BUILD_DIR="$BUILD_DIR"
-  mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"
+  VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
+  BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
+  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE"; \
+  export KAS_BUILD_DIR="$BUILD_DIR"; \
+  mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas shell \
     {{KAS_BASE}}:{{KAS_DIR}}/machine/{{machine}}.yml:{{KAS_DIR}}/distro/{{variant}}.yml:{{KAS_DIR}}/images/{{image}}.yml
 
-# Run QEMU for the selected machine/config
 run machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
-  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"
-  export KAS_BUILD_DIR="$BUILD_DIR"
-  mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"
+  VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
+  BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
+  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE"; \
+  export KAS_BUILD_DIR="$BUILD_DIR"; \
+  mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas shell --command "runqemu {{machine}} nographic" \
     {{KAS_BASE}}:{{KAS_DIR}}/machine/{{machine}}.yml:{{KAS_DIR}}/distro/{{variant}}.yml:{{KAS_DIR}}/images/{{image}}.yml
 
-# Warm repos/build environment without running a full image build
-# This uses kas shell to materialize the environment and source checkouts.
 fetch machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
-  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"
-  export KAS_BUILD_DIR="$BUILD_DIR"
-  mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"
+  VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
+  BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
+  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE"; \
+  export KAS_BUILD_DIR="$BUILD_DIR"; \
+  mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas shell --command "bitbake -p" \
     {{KAS_BASE}}:{{KAS_DIR}}/machine/{{machine}}.yml:{{KAS_DIR}}/distro/{{variant}}.yml:{{KAS_DIR}}/images/{{image}}.yml
 
-# Remove one specific build directory only
 clean-build machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT:
-  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"
-  echo "Removing build dir: $BUILD_DIR"
+  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  echo "Removing build dir: $BUILD_DIR"; \
   rm -rf "$BUILD_DIR"
 
-# Remove all build directories, but preserve downloads/sstate/sources
 clean-all:
   echo "Removing all Yocto build directories under {{YOCTO_ROOT}}/build"
   rm -rf "{{YOCTO_ROOT}}/build"
 
-# Echo resolved config and paths for debugging/CI
 print-config machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   @echo "KAS_BASE={{KAS_BASE}}"
   @echo "KAS_DIR={{KAS_DIR}}"
@@ -76,3 +79,5 @@ print-config machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE
   @echo "KAS_SOURCES_DIR={{KAS_SOURCES_DIR}}"
   @echo "KAS_DOWNLOAD_DIR={{KAS_DOWNLOAD_DIR}}"
   @echo "KAS_SSTATE_DIR={{KAS_SSTATE_DIR}}"
+  @echo "VERSION=${VERSION:-0.1.0-alpha}"
+  @echo "BUILD_VERSION=${BUILD_VERSION:-${VERSION:-0.1.0-alpha}}"

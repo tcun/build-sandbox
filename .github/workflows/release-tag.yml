@@ -1,33 +1,24 @@
-name: Rust CI
+name: Release Tag Build
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "apps/**"
-      - "just/**"
-      - "Justfile"
-      - ".github/workflows/rust.yml"
-  pull_request:
-    paths:
-      - "apps/**"
-      - "just/**"
-      - "Justfile"
-      - ".github/workflows/rust.yml"
+    tags:
+      - "v*"
 
 concurrency:
-  group: rust-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-tag-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  preflight:
-    name: preflight checks
+  release:
+    name: validate tag and build
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install just
         uses: taiki-e/install-action@just
@@ -37,11 +28,19 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install kas
+        run: pipx install kas
+
       - name: Cache cargo and target
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             apps -> target
 
-      - name: Run preflight workflow
-        run: just ci::preflight
+      - name: Run release pipeline
+        run: just ci::release "${{ github.ref_name }}"
