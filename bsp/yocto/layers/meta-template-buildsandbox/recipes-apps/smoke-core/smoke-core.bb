@@ -1,7 +1,7 @@
 SUMMARY = "Template smoke application for build-flavor verification"
 LICENSE = "CLOSED"
 
-inherit cargo
+inherit cargo_bin
 
 PV = "${@d.getVar('TEMPLATE_VERSION') or '0.1.0-alpha'}"
 
@@ -31,6 +31,7 @@ python () {
 # Build the workspace and select smoke-core binary.
 CARGO_MANIFEST_PATH = "${S}/apps/Cargo.toml"
 CARGO_BUILD_FLAGS:append = " -p smoke-core"
+do_compile[network] = "1"
 
 do_install:append() {
     install -d ${D}${sysconfdir}

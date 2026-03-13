@@ -11,6 +11,13 @@ repos:
       meta-poky:
       meta-yocto-bsp:
 
+  meta-rust-bin:
+    url: https://github.com/rust-embedded/meta-rust-bin.git
+    branch: master
+    path: build/yocto/sources/meta-rust-bin
+    layers:
+      .:
+
   meta-template-buildsandbox:
     path: bsp/yocto/layers/meta-template-buildsandbox
     layers:
@@ -23,6 +30,7 @@ env:
   SOURCE_BRANCH:
   SOURCE_REV:
   SMOKE_CORE_EXTERNALSRC:
+  RUST_VERSION:
   GIT_SSH_COMMAND:
 
 local_conf_header:
@@ -31,4 +39,7 @@ local_conf_header:
     SSTATE_DIR ?= "${TOPDIR}/../../sstate-cache"
     BB_NUMBER_THREADS ?= "${@oe.utils.cpu_count()}"
     PARALLEL_MAKE ?= "-j ${@oe.utils.cpu_count()}"
-    BB_ENV_PASSTHROUGH_ADDITIONS:append = " TEMPLATE_VERSION TEMPLATE_BUILD_VERSION TAR_OPTIONS SOURCE_BRANCH SOURCE_REV SMOKE_CORE_EXTERNALSRC GIT_SSH_COMMAND"
+    RUST_VERSION ?= "1.94.0"
+    PREFERRED_VERSION_rust-bin = "${RUST_VERSION}"
+    PREFERRED_VERSION_cargo-bin = "${RUST_VERSION}"
+    BB_ENV_PASSTHROUGH_ADDITIONS:append = " TEMPLATE_VERSION TEMPLATE_BUILD_VERSION TAR_OPTIONS SOURCE_BRANCH SOURCE_REV SMOKE_CORE_EXTERNALSRC RUST_VERSION GIT_SSH_COMMAND"
