@@ -8,9 +8,9 @@ PV = "${@d.getVar('VERSION') or '0.1.0-alpha'}"
 # Immutable source inputs for reproducible builds:
 # - SOURCE_REPO / SOURCE_BRANCH choose the git stream
 # - SOURCE_REV pins an exact commit (set by CI release flow)
-SOURCE_REPO ?= "github.com/tcun/build-sandbox.git"
+SOURCE_REPO ?= "${LAYERDIR_meta-tcun-buildsandbox}/../../../.."
 SOURCE_BRANCH ?= "main"
-SOURCE_PROTOCOL ?= "https"
+SOURCE_PROTOCOL ?= "file"
 SOURCE_REV ?= ""
 
 SRC_URI = "git://${SOURCE_REPO};protocol=${SOURCE_PROTOCOL};branch=${SOURCE_BRANCH}"
