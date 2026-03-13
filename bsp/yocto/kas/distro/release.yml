@@ -4,5 +4,5 @@ header:
 local_conf_header:
   distro: |
     DISTRO = "poky"
-    TCUN_BUILD_FLAVOR = "release"
-    TCUN_SOURCE_MODE = "canonical"
+    BUILD_FLAVOR = "release"
+    SOURCE_MODE = "canonical"

@@ -11,14 +11,14 @@ repos:
       meta-poky:
       meta-yocto-bsp:
 
-  meta-tcun-buildsandbox:
-    path: bsp/yocto/layers/meta-tcun-buildsandbox
+  meta-template-buildsandbox:
+    path: bsp/yocto/layers/meta-template-buildsandbox
     layers:
       .:
 
 env:
-  TCUN_VERSION:
-  TCUN_BUILD_VERSION:
+  TEMPLATE_VERSION:
+  TEMPLATE_BUILD_VERSION:
   TAR_OPTIONS:
   SOURCE_BRANCH:
   SOURCE_REV:
@@ -31,4 +31,4 @@ local_conf_header:
     SSTATE_DIR ?= "${TOPDIR}/../../sstate-cache"
     BB_NUMBER_THREADS ?= "${@oe.utils.cpu_count()}"
     PARALLEL_MAKE ?= "-j ${@oe.utils.cpu_count()}"
-    BB_ENV_PASSTHROUGH_ADDITIONS:append = " TCUN_VERSION TCUN_BUILD_VERSION TAR_OPTIONS SOURCE_BRANCH SOURCE_REV SMOKE_CORE_EXTERNALSRC GIT_SSH_COMMAND"
+    BB_ENV_PASSTHROUGH_ADDITIONS:append = " TEMPLATE_VERSION TEMPLATE_BUILD_VERSION TAR_OPTIONS SOURCE_BRANCH SOURCE_REV SMOKE_CORE_EXTERNALSRC GIT_SSH_COMMAND"

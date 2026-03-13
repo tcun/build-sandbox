@@ -4,8 +4,8 @@ header:
 local_conf_header:
   distro: |
     DISTRO = "poky"
-    TCUN_BUILD_FLAVOR = "dev"
-    TCUN_SOURCE_MODE = "local"
+    BUILD_FLAVOR = "dev"
+    SOURCE_MODE = "local"
     INHERIT += "externalsrc"
     EXTERNALSRC:pn-smoke-core = "${SMOKE_CORE_EXTERNALSRC}"
     EXTERNALSRC_BUILD:pn-smoke-core = "${WORKDIR}/externalsrc-build"

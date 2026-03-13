@@ -1,4 +1,4 @@
 header:
   version: 14
 
-target: tcun-image-minimal
+target: template-image-minimal

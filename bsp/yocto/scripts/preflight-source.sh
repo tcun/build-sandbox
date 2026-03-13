@@ -8,7 +8,7 @@ if [[ -z "${variant}" ]]; then
 fi
 
 echo "=== shell env ==="
-env | grep -E '^(TCUN_VERSION|TCUN_BUILD_VERSION|SOURCE_REV|SMOKE_CORE_EXTERNALSRC|BB_ENV_PASSTHROUGH_ADDITIONS)=' || true
+env | grep -E '^(TEMPLATE_VERSION|TEMPLATE_BUILD_VERSION|SOURCE_REV|SMOKE_CORE_EXTERNALSRC|BB_ENV_PASSTHROUGH_ADDITIONS)=' || true
 
 env_dump="$(mktemp)"
 trap 'rm -f "${env_dump}"' EXIT
@@ -16,7 +16,7 @@ trap 'rm -f "${env_dump}"' EXIT
 bitbake -e smoke-core > "${env_dump}"
 
 echo "=== bitbake env (smoke-core) ==="
-grep -E '^(TCUN_VERSION|TCUN_BUILD_VERSION|TCUN_BUILD_FLAVOR|TCUN_SOURCE_MODE|SRC_URI|SRCREV|SOURCE_REV|EXTERNALSRC)=' "${env_dump}" || true
+grep -E '^(TEMPLATE_VERSION|TEMPLATE_BUILD_VERSION|BUILD_FLAVOR|SOURCE_MODE|SRC_URI|SRCREV|SOURCE_REV|EXTERNALSRC)=' "${env_dump}" || true
 
 if [[ "${variant}" == "test" || "${variant}" == "release" ]]; then
     if grep -Eq '^SRC_URI="[^"]*protocol=file' "${env_dump}"; then

@@ -3,7 +3,7 @@ LICENSE = "CLOSED"
 
 inherit cargo
 
-PV = "${@d.getVar('TCUN_VERSION') or '0.1.0-alpha'}"
+PV = "${@d.getVar('TEMPLATE_VERSION') or '0.1.0-alpha'}"
 
 # Immutable source inputs for reproducible builds:
 # - SOURCE_BRANCH chooses the git stream
@@ -16,15 +16,15 @@ SRCREV = "${@d.getVar('SOURCE_REV') if d.getVar('SOURCE_REV') else d.getVar('AUT
 S = "${WORKDIR}/git"
 
 # Default flavor; distro config should override this (dev/test/release).
-TCUN_BUILD_FLAVOR ?= "dev"
-TCUN_SOURCE_MODE ?= "canonical"
+BUILD_FLAVOR ?= "dev"
+SOURCE_MODE ?= "canonical"
 
 python () {
-    flavor = (d.getVar("TCUN_BUILD_FLAVOR") or "").strip()
+    flavor = (d.getVar("BUILD_FLAVOR") or "").strip()
     source_rev = (d.getVar("SOURCE_REV") or "").strip()
     if flavor in ("test", "release") and not source_rev:
         bb.fatal(
-            "SOURCE_REV must be set for smoke-core when TCUN_BUILD_FLAVOR is '%s'" % flavor
+            "SOURCE_REV must be set for smoke-core when BUILD_FLAVOR is '%s'" % flavor
         )
 }
 
@@ -34,5 +34,5 @@ CARGO_BUILD_FLAGS:append = " -p smoke-core"
 
 do_install:append() {
     install -d ${D}${sysconfdir}
-    printf "%s\n" "${TCUN_BUILD_FLAVOR}" > ${D}${sysconfdir}/tcun-build-flavor
+    printf "%s\n" "${BUILD_FLAVOR}" > ${D}${sysconfdir}/build-flavor
 }

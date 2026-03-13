@@ -1,6 +1,6 @@
 SUMMARY = "Minimal bootable image for QEMU bring-up"
 LICENSE = "MIT"
-PV = "${@d.getVar('TCUN_VERSION') or '0.1.0-alpha'}"
+PV = "${@d.getVar('TEMPLATE_VERSION') or '0.1.0-alpha'}"
 
 inherit core-image
 
