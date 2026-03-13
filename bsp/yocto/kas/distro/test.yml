@@ -5,4 +5,5 @@ local_conf_header:
   distro: |
     DISTRO = "poky"
     TCUN_BUILD_FLAVOR = "test"
+    TCUN_SOURCE_MODE = "canonical"
     EXTRA_IMAGE_FEATURES:append = " debug-tweaks ptest-pkgs"

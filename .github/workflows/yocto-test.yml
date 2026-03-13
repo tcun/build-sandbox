@@ -1,0 +1,59 @@
+name: Yocto Test CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "bsp/yocto/**"
+      - "just/**"
+      - "infra/runners/github/yocto/**"
+      - "apps/**"
+      - "Justfile"
+      - ".github/workflows/yocto-test.yml"
+      - ".github/workflows/release-tag.yml"
+  pull_request:
+    paths:
+      - "bsp/yocto/**"
+      - "just/**"
+      - "infra/runners/github/yocto/**"
+      - "apps/**"
+      - "Justfile"
+      - ".github/workflows/yocto-test.yml"
+      - ".github/workflows/release-tag.yml"
+
+concurrency:
+  group: yocto-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  yocto-test:
+    name: canonical yocto test build
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - yocto
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Guard private key tracking
+        run: just ci::guard-no-private-keys
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install kas
+        run: pipx install kas
+
+      - name: Run yocto test pipeline
+        run: just ci::yocto-test

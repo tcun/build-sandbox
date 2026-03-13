@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     jq \
     locales \
+    openssh-client \
     sudo \
     unzip \
     && rm -rf /var/lib/apt/lists/*

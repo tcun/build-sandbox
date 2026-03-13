@@ -6,19 +6,27 @@ inherit cargo
 PV = "${@d.getVar('VERSION') or '0.1.0-alpha'}"
 
 # Immutable source inputs for reproducible builds:
-# - SOURCE_REPO / SOURCE_BRANCH choose the git stream
+# - SOURCE_BRANCH chooses the git stream
 # - SOURCE_REV pins an exact commit (set by CI release flow)
-SOURCE_REPO ?= "${LAYERDIR_meta-tcun-buildsandbox}/../../../.."
 SOURCE_BRANCH ?= "main"
-SOURCE_PROTOCOL ?= "file"
 SOURCE_REV ?= ""
 
-SRC_URI = "git://${SOURCE_REPO};protocol=${SOURCE_PROTOCOL};branch=${SOURCE_BRANCH}"
+SRC_URI = "git://github.com/tcun/build-sandbox.git;protocol=ssh;user=git;branch=${SOURCE_BRANCH}"
 SRCREV = "${@d.getVar('SOURCE_REV') if d.getVar('SOURCE_REV') else d.getVar('AUTOREV')}"
 S = "${WORKDIR}/git"
 
 # Default flavor; distro config should override this (dev/test/release).
 TCUN_BUILD_FLAVOR ?= "dev"
+TCUN_SOURCE_MODE ?= "canonical"
+
+python () {
+    flavor = (d.getVar("TCUN_BUILD_FLAVOR") or "").strip()
+    source_rev = (d.getVar("SOURCE_REV") or "").strip()
+    if flavor in ("test", "release") and not source_rev:
+        bb.fatal(
+            "SOURCE_REV must be set for smoke-core when TCUN_BUILD_FLAVOR is '%s'" % flavor
+        )
+}
 
 # Build the workspace and select smoke-core binary.
 CARGO_MANIFEST_PATH = "${S}/apps/Cargo.toml"

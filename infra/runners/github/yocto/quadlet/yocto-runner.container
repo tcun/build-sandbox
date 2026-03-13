@@ -20,12 +20,14 @@ ContainerName=yocto-runner
 
 # Runner configuration - use environment file for secrets
 EnvironmentFile=%h/.config/yocto-runner/env
+Environment=YOCTO_FETCH_SSH_KEY=/run/yocto-ssh/yocto_ci
 
 # Persistent volumes for build caches
 Volume=yocto-downloads:/cache/downloads:Z
 Volume=yocto-sstate:/cache/sstate-cache:Z
 Volume=yocto-sources:/cache/sources:Z
 Volume=yocto-workdir:/home/runner/work:Z
+Volume=%h/.config/yocto-runner/keys:/run/yocto-ssh:ro,Z
 # Local artifact storage for dev builds
 # Mount at /srv (same as artifact-server) so we can create/manage subdirs as the
 # unprivileged 'runner' user without needing to chown the volume root.

@@ -11,6 +11,8 @@ RUNNER_WORKDIR="${RUNNER_WORKDIR:-/home/runner/work}"
 RUNNER_GROUP="${RUNNER_GROUP:-Default}"
 RUNNER_RECONFIGURE="${RUNNER_RECONFIGURE:-false}"
 RUNNER_REMOVE_ON_EXIT="${RUNNER_REMOVE_ON_EXIT:-false}"
+YOCTO_FETCH_SSH_KEY="${YOCTO_FETCH_SSH_KEY:-}"
+YOCTO_FETCH_SSH_HOST="${YOCTO_FETCH_SSH_HOST:-github.com}"
 
 # Optional: allow GitHub Enterprise
 GITHUB_URL="${GITHUB_URL:-https://github.com}"
@@ -98,11 +100,52 @@ fetch_remove_token() {
     echo "${token}"
 }
 
+configure_yocto_fetch_ssh() {
+    local key_src="${YOCTO_FETCH_SSH_KEY}"
+    local key_dst="${HOME}/.ssh/yocto_ci"
+    local known_hosts_file="${HOME}/.ssh/known_hosts"
+
+    if [[ ! -f "${key_src}" ]]; then
+        echo "ERROR: YOCTO_FETCH_SSH_KEY file not found: ${key_src}" >&2
+        return 1
+    fi
+
+    mkdir -p "${HOME}/.ssh"
+    chmod 700 "${HOME}/.ssh"
+
+    cp "${key_src}" "${key_dst}"
+    chmod 600 "${key_dst}"
+
+    if ! command -v ssh-keyscan >/dev/null 2>&1; then
+        echo "ERROR: ssh-keyscan not found. Install openssh-client in the runner image." >&2
+        return 1
+    fi
+
+    ssh-keyscan -H "${YOCTO_FETCH_SSH_HOST}" > "${known_hosts_file}.tmp" 2>/dev/null || {
+        echo "ERROR: Failed to populate known_hosts for ${YOCTO_FETCH_SSH_HOST}" >&2
+        return 1
+    }
+    mv "${known_hosts_file}.tmp" "${known_hosts_file}"
+    chmod 644 "${known_hosts_file}"
+
+    GIT_SSH_COMMAND="ssh -i ${key_dst} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${known_hosts_file}"
+    export GIT_SSH_COMMAND
+    git config --global core.sshCommand "${GIT_SSH_COMMAND}"
+
+    echo "Configured Git SSH command for Yocto fetches."
+}
+
 # Validate required environment variables
 if [[ -z "${RUNNER_REPO}" ]]; then
     echo "ERROR: RUNNER_REPO environment variable is required"
     echo "       Format: owner/repo (e.g., BackburnerLabs/savers-aps)"
     exit 1
+fi
+
+if [[ -n "${YOCTO_FETCH_SSH_KEY}" ]]; then
+    configure_yocto_fetch_ssh
+else
+    echo "WARN: YOCTO_FETCH_SSH_KEY is not set; canonical Yocto SSH fetches may fail." >&2
 fi
 
 cd /home/runner/actions-runner

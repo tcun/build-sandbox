@@ -47,6 +47,7 @@ services:
       - RUNNER_GROUP=${RUNNER_GROUP:-Default}
       - RUNNER_RECONFIGURE=${RUNNER_RECONFIGURE:-false}
       - RUNNER_REMOVE_ON_EXIT=${RUNNER_REMOVE_ON_EXIT:-false}
+      - YOCTO_FETCH_SSH_KEY=${YOCTO_FETCH_SSH_KEY:-/run/yocto-ssh/yocto_ci}
       # Yocto build parallelism (adjust based on host resources)
       - BB_NUMBER_THREADS=${BB_NUMBER_THREADS:-8}
       - PARALLEL_MAKE=${PARALLEL_MAKE:--j 8}
@@ -62,6 +63,8 @@ services:
       - yocto-workdir:/home/runner/work:Z
       # Local artifact storage for dev builds (can be served by separate Caddy stack)
       - yocto-artifacts:/srv/yocto-artifacts:Z
+      # SSH deploy key for canonical Yocto git fetches
+      - ./keys:/run/yocto-ssh:ro,Z
 
     # Resource limits - Yocto builds are resource-intensive
     # Adjust these based on your host system

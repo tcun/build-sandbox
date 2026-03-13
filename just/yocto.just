@@ -1,7 +1,8 @@
-set shell := ["bash", "-cu"]
+set shell := ["bash", "-euo", "pipefail", "-c"]
 
 KAS_DIR := justfile_directory() / "bsp/yocto/kas"
 KAS_BASE := KAS_DIR / "base.yml"
+YOCTO_PREFLIGHT_SCRIPT := justfile_directory() / "bsp/yocto/scripts/preflight-source.sh"
 
 YOCTO_ROOT := justfile_directory() / "build/yocto"
 KAS_SOURCES_DIR := YOCTO_ROOT / "sources"
@@ -19,29 +20,63 @@ build machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
   BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
   TAR_OPTIONS_VALUE="${TAR_OPTIONS:---no-same-owner}"; \
-  SOURCE_REPO_VALUE="${SOURCE_REPO:-{{justfile_directory()}}}"; \
   SOURCE_BRANCH_VALUE="${SOURCE_BRANCH:-main}"; \
-  SOURCE_PROTOCOL_VALUE="${SOURCE_PROTOCOL:-file}"; \
   SOURCE_REV_VALUE="${SOURCE_REV:-}"; \
+  SMOKE_CORE_EXTERNALSRC_VALUE="${SMOKE_CORE_EXTERNALSRC:-{{justfile_directory()}}}"; \
   BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  if [[ "{{variant}}" == "dev" ]]; then \
+    [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
+    [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+  else \
+    SMOKE_CORE_EXTERNALSRC_VALUE=""; \
+    [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \
+  fi; \
   export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE" TAR_OPTIONS="$TAR_OPTIONS_VALUE"; \
-  export SOURCE_REPO="$SOURCE_REPO_VALUE" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_PROTOCOL="$SOURCE_PROTOCOL_VALUE" SOURCE_REV="$SOURCE_REV_VALUE"; \
+  export SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV_VALUE" SMOKE_CORE_EXTERNALSRC="$SMOKE_CORE_EXTERNALSRC_VALUE"; \
   export KAS_BUILD_DIR="$BUILD_DIR"; \
   mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas build \
+    {{KAS_BASE}}:{{KAS_DIR}}/machine/{{machine}}.yml:{{KAS_DIR}}/distro/{{variant}}.yml:{{KAS_DIR}}/images/{{image}}.yml
+
+preflight-source machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
+  VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
+  BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
+  TAR_OPTIONS_VALUE="${TAR_OPTIONS:---no-same-owner}"; \
+  SOURCE_BRANCH_VALUE="${SOURCE_BRANCH:-main}"; \
+  SOURCE_REV_VALUE="${SOURCE_REV:-}"; \
+  SMOKE_CORE_EXTERNALSRC_VALUE="${SMOKE_CORE_EXTERNALSRC:-{{justfile_directory()}}}"; \
+  BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  if [[ "{{variant}}" == "dev" ]]; then \
+    [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
+    [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+  else \
+    SMOKE_CORE_EXTERNALSRC_VALUE=""; \
+    [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \
+  fi; \
+  export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE" TAR_OPTIONS="$TAR_OPTIONS_VALUE"; \
+  export SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV_VALUE" SMOKE_CORE_EXTERNALSRC="$SMOKE_CORE_EXTERNALSRC_VALUE"; \
+  export KAS_BUILD_DIR="$BUILD_DIR"; \
+  mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
+  kas shell --command "bash {{YOCTO_PREFLIGHT_SCRIPT}} {{variant}}" \
     {{KAS_BASE}}:{{KAS_DIR}}/machine/{{machine}}.yml:{{KAS_DIR}}/distro/{{variant}}.yml:{{KAS_DIR}}/images/{{image}}.yml
 
 shell machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
   BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
   TAR_OPTIONS_VALUE="${TAR_OPTIONS:---no-same-owner}"; \
-  SOURCE_REPO_VALUE="${SOURCE_REPO:-{{justfile_directory()}}}"; \
   SOURCE_BRANCH_VALUE="${SOURCE_BRANCH:-main}"; \
-  SOURCE_PROTOCOL_VALUE="${SOURCE_PROTOCOL:-file}"; \
   SOURCE_REV_VALUE="${SOURCE_REV:-}"; \
+  SMOKE_CORE_EXTERNALSRC_VALUE="${SMOKE_CORE_EXTERNALSRC:-{{justfile_directory()}}}"; \
   BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  if [[ "{{variant}}" == "dev" ]]; then \
+    [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
+    [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+  else \
+    SMOKE_CORE_EXTERNALSRC_VALUE=""; \
+    [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \
+  fi; \
   export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE" TAR_OPTIONS="$TAR_OPTIONS_VALUE"; \
-  export SOURCE_REPO="$SOURCE_REPO_VALUE" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_PROTOCOL="$SOURCE_PROTOCOL_VALUE" SOURCE_REV="$SOURCE_REV_VALUE"; \
+  export SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV_VALUE" SMOKE_CORE_EXTERNALSRC="$SMOKE_CORE_EXTERNALSRC_VALUE"; \
   export KAS_BUILD_DIR="$BUILD_DIR"; \
   mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas shell \
@@ -51,13 +86,19 @@ run machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
   BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
   TAR_OPTIONS_VALUE="${TAR_OPTIONS:---no-same-owner}"; \
-  SOURCE_REPO_VALUE="${SOURCE_REPO:-{{justfile_directory()}}}"; \
   SOURCE_BRANCH_VALUE="${SOURCE_BRANCH:-main}"; \
-  SOURCE_PROTOCOL_VALUE="${SOURCE_PROTOCOL:-file}"; \
   SOURCE_REV_VALUE="${SOURCE_REV:-}"; \
+  SMOKE_CORE_EXTERNALSRC_VALUE="${SMOKE_CORE_EXTERNALSRC:-{{justfile_directory()}}}"; \
   BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  if [[ "{{variant}}" == "dev" ]]; then \
+    [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
+    [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+  else \
+    SMOKE_CORE_EXTERNALSRC_VALUE=""; \
+    [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \
+  fi; \
   export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE" TAR_OPTIONS="$TAR_OPTIONS_VALUE"; \
-  export SOURCE_REPO="$SOURCE_REPO_VALUE" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_PROTOCOL="$SOURCE_PROTOCOL_VALUE" SOURCE_REV="$SOURCE_REV_VALUE"; \
+  export SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV_VALUE" SMOKE_CORE_EXTERNALSRC="$SMOKE_CORE_EXTERNALSRC_VALUE"; \
   export KAS_BUILD_DIR="$BUILD_DIR"; \
   mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas shell --command "runqemu {{machine}} nographic" \
@@ -67,13 +108,19 @@ fetch machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   VERSION_VALUE="${VERSION:-0.1.0-alpha}"; \
   BUILD_VERSION_VALUE="${BUILD_VERSION:-$VERSION_VALUE}"; \
   TAR_OPTIONS_VALUE="${TAR_OPTIONS:---no-same-owner}"; \
-  SOURCE_REPO_VALUE="${SOURCE_REPO:-{{justfile_directory()}}}"; \
   SOURCE_BRANCH_VALUE="${SOURCE_BRANCH:-main}"; \
-  SOURCE_PROTOCOL_VALUE="${SOURCE_PROTOCOL:-file}"; \
   SOURCE_REV_VALUE="${SOURCE_REV:-}"; \
+  SMOKE_CORE_EXTERNALSRC_VALUE="${SMOKE_CORE_EXTERNALSRC:-{{justfile_directory()}}}"; \
   BUILD_DIR="{{YOCTO_ROOT}}/build/{{machine}}-{{variant}}"; \
+  if [[ "{{variant}}" == "dev" ]]; then \
+    [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
+    [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+  else \
+    SMOKE_CORE_EXTERNALSRC_VALUE=""; \
+    [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \
+  fi; \
   export VERSION="$VERSION_VALUE" BUILD_VERSION="$BUILD_VERSION_VALUE" TAR_OPTIONS="$TAR_OPTIONS_VALUE"; \
-  export SOURCE_REPO="$SOURCE_REPO_VALUE" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_PROTOCOL="$SOURCE_PROTOCOL_VALUE" SOURCE_REV="$SOURCE_REV_VALUE"; \
+  export SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV_VALUE" SMOKE_CORE_EXTERNALSRC="$SMOKE_CORE_EXTERNALSRC_VALUE"; \
   export KAS_BUILD_DIR="$BUILD_DIR"; \
   mkdir -p "$BUILD_DIR" "{{KAS_SOURCES_DIR}}" "{{KAS_DOWNLOAD_DIR}}" "{{KAS_SSTATE_DIR}}"; \
   kas shell --command "bitbake -p" \
@@ -106,7 +153,6 @@ print-config machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE
   @echo "VERSION=${VERSION:-0.1.0-alpha}"
   @echo "BUILD_VERSION=${BUILD_VERSION:-${VERSION:-0.1.0-alpha}}"
   @echo "TAR_OPTIONS=${TAR_OPTIONS:---no-same-owner}"
-  @echo "SOURCE_REPO=${SOURCE_REPO:-{{justfile_directory()}}}"
   @echo "SOURCE_BRANCH=${SOURCE_BRANCH:-main}"
-  @echo "SOURCE_PROTOCOL=${SOURCE_PROTOCOL:-file}"
   @echo "SOURCE_REV=${SOURCE_REV:-}"
+  @echo "SMOKE_CORE_EXTERNALSRC=${SMOKE_CORE_EXTERNALSRC:-{{justfile_directory()}}}"
