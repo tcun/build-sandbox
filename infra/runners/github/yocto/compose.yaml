@@ -58,7 +58,7 @@ services:
       # Runner work directory (checkout + build, ~100GB+)
       - yocto-workdir:/home/runner/work:Z
       # Shared artifact directory on host (served by separate Caddy stack)
-      - ${ARTIFACT_ROOT:-/srv/yocto-artifacts}:/srv/yocto-artifacts:Z
+      - ${ARTIFACT_ROOT:-/srv/yocto-artifacts}:/srv/yocto-artifacts:Z,U
       # SSH deploy key for canonical Yocto git fetches
       - ./keys:/run/yocto-ssh:ro,Z
 

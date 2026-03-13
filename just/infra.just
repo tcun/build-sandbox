@@ -94,6 +94,11 @@ artifact-publish machine="qemux86-64" variant="dev" label="" src_dir="" artifact
     ROOT_DIR_PUBLISH="{{artifact_root}}"; \
     if [[ -z "$ROOT_DIR_PUBLISH" ]]; then ROOT_DIR_PUBLISH="${ARTIFACT_ROOT:-/srv/yocto-artifacts}"; fi; \
     mkdir -p "$ROOT_DIR_PUBLISH"; \
+    [[ -w "$ROOT_DIR_PUBLISH" ]] || { \
+      echo "artifact root is not writable: $ROOT_DIR_PUBLISH" >&2; \
+      echo "set ARTIFACT_ROOT to a writable path for the runner user, then recreate runner container" >&2; \
+      exit 1; \
+    }; \
     DEST_DIR="$ROOT_DIR_PUBLISH/local/{{variant}}/{{machine}}/$TAG"; \
     mkdir -p "$DEST_DIR"; \
     cp -a "$SOURCE_DIR"/. "$DEST_DIR"/; \
