@@ -28,6 +28,8 @@ Runner and artifact infrastructure is organized under `infra/`.
 - Runner and artifact server are separate stacks now.
 - `deploy-runner.sh` was intentionally removed.
 - Use `podman-compose` (or your orchestrator of choice) from each directory.
+- Runner registration uses `RUNNER_TOKEN` only (no PAT flow in this repo setup).
+- Runner credentials are persisted under `/home/runner/work/.runner-state` (on the `yocto-workdir` volume), so container recreation does not require a new token unless you explicitly reconfigure/remove.
 
 ## Yocto Canonical Fetch SSH Key
 

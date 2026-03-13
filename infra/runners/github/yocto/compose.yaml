@@ -4,11 +4,8 @@
 # Artifact serving (Caddy) is managed separately under `infra/services/artifact-server`.
 #
 # Quick start:
-#   1. Create a long-lived GitHub token (recommended) and put it in .env:
-#      echo "RUNNER_PAT=<your-token>" > .env
-#
-#      If you prefer a short-lived runner registration token (expires quickly):
-#      https://github.com/BackburnerLabs/savers-aps/settings/actions/runners/new
+#   1. Create a runner registration token and put it in .env:
+#      https://github.com/tcun/build-sandbox/settings/actions/runners/new
 #      echo "RUNNER_TOKEN=<your-token>" > .env
 #
 #   3. Build and start:
@@ -40,7 +37,6 @@ services:
     # Runner configuration via environment
     environment:
       - RUNNER_REPO=${RUNNER_REPO:-BackburnerLabs/savers-aps}
-      - RUNNER_PAT=${RUNNER_PAT:-}
       - RUNNER_TOKEN=${RUNNER_TOKEN:-}
       - RUNNER_NAME=${RUNNER_NAME:-yocto-runner-01}
       - RUNNER_LABELS=${RUNNER_LABELS:-yocto,kas,rust,self-hosted,linux,x64}

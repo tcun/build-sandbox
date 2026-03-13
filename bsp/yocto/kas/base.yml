@@ -16,6 +16,15 @@ repos:
     layers:
       .:
 
+env:
+  VERSION:
+  BUILD_VERSION:
+  TAR_OPTIONS:
+  SOURCE_BRANCH:
+  SOURCE_REV:
+  SMOKE_CORE_EXTERNALSRC:
+  GIT_SSH_COMMAND:
+
 local_conf_header:
   common: |
     DL_DIR ?= "${TOPDIR}/../../downloads"

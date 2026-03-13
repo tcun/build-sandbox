@@ -153,14 +153,17 @@ runner-env-sync:
 runner-env-validate:
   @ENV_FILE="{{RUNNER_ENV_FILE}}"; \
     [[ -f "$ENV_FILE" ]] || { echo "missing $ENV_FILE (run just infra::runner-env-sync)" >&2; exit 1; }; \
-    RUNNER_PAT_VAL="$(awk -F= '/^RUNNER_PAT=/{print $2; exit}' "$ENV_FILE" || true)"; \
     RUNNER_TOKEN_VAL="$(awk -F= '/^RUNNER_TOKEN=/{print $2; exit}' "$ENV_FILE" || true)"; \
     RUNNER_REPO_VAL="$(awk -F= '/^RUNNER_REPO=/{print $2; exit}' "$ENV_FILE" || true)"; \
-    if [[ "$RUNNER_PAT_VAL" == "your_token_here" ]]; then RUNNER_PAT_VAL=""; fi; \
+    RUNNER_RECONFIGURE_VAL="$(awk -F= '/^RUNNER_RECONFIGURE=/{print $2; exit}' "$ENV_FILE" || true)"; \
     if [[ "$RUNNER_TOKEN_VAL" == "your_token_here" ]]; then RUNNER_TOKEN_VAL=""; fi; \
+    if [[ -z "$RUNNER_RECONFIGURE_VAL" ]]; then RUNNER_RECONFIGURE_VAL="false"; fi; \
     [[ -n "$RUNNER_REPO_VAL" ]] || { echo "RUNNER_REPO is required in $ENV_FILE (owner/repo or org)" >&2; exit 1; }; \
-    if [[ -z "$RUNNER_PAT_VAL" && -z "$RUNNER_TOKEN_VAL" ]]; then \
-      echo "Set RUNNER_PAT (recommended) or RUNNER_TOKEN in $ENV_FILE before starting the runner." >&2; \
+    if [[ "$RUNNER_RECONFIGURE_VAL" == "true" && -z "$RUNNER_TOKEN_VAL" ]]; then \
+      echo "RUNNER_TOKEN is required when RUNNER_RECONFIGURE=true in $ENV_FILE." >&2; \
       exit 1; \
+    fi; \
+    if [[ -z "$RUNNER_TOKEN_VAL" ]]; then \
+      echo "WARN: RUNNER_TOKEN is empty. This is fine only if runner is already configured in the existing container." >&2; \
     fi; \
     echo "Runner env validation passed for $RUNNER_REPO_VAL"
