@@ -1,6 +1,6 @@
 # Artifact Server Deployment with Podman
 #
-# Serves build artifacts from a shared volume using Caddy.
+# Serves build artifacts from a shared host directory using Caddy.
 #
 # Quick start:
 #   1. Optional: copy `.env.example` to `.env` and adjust values.
@@ -16,10 +16,6 @@ services:
     ports:
       - "${ARTIFACT_BIND:-0.0.0.0:8080}:80"
     volumes:
-      - ${ARTIFACT_VOLUME:-yocto-artifacts}:/srv:ro,Z
+      - ${ARTIFACT_ROOT:-/srv/yocto-artifacts}:/srv:ro,Z
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     command: caddy file-server --root /srv --browse --listen :80
-
-volumes:
-  yocto-artifacts:
-    name: ${ARTIFACT_VOLUME:-yocto-artifacts}

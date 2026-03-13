@@ -65,9 +65,10 @@ jobs:
         run: |
           just infra::artifact-publish qemux86-64 release "${{ github.ref_name }}"
           URL="$(just infra::artifact-url release qemux86-64 "${{ github.ref_name }}")"
+          ARTIFACT_ROOT_VALUE="${ARTIFACT_ROOT:-/srv/yocto-artifacts}"
           {
             echo "### Artifact Publish"
             echo ""
-            echo "- Published to podman volume: \`yocto-artifacts\`"
+            echo "- Published to shared artifact root: \`${ARTIFACT_ROOT_VALUE}\`"
             echo "- URL: ${URL}"
           } >> "$GITHUB_STEP_SUMMARY"

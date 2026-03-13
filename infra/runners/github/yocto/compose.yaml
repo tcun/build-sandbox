@@ -57,8 +57,8 @@ services:
       - yocto-sstate:/cache/sstate-cache:Z
       # Runner work directory (checkout + build, ~100GB+)
       - yocto-workdir:/home/runner/work:Z
-      # Local artifact storage for dev builds (can be served by separate Caddy stack)
-      - yocto-artifacts:/srv/yocto-artifacts:Z
+      # Shared artifact directory on host (served by separate Caddy stack)
+      - ${ARTIFACT_ROOT:-/srv/yocto-artifacts}:/srv/yocto-artifacts:Z
       # SSH deploy key for canonical Yocto git fetches
       - ./keys:/run/yocto-ssh:ro,Z
 
@@ -93,5 +93,3 @@ volumes:
     name: yocto-sstate
   yocto-workdir:
     name: yocto-workdir
-  yocto-artifacts:
-    name: yocto-artifacts

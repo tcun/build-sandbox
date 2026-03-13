@@ -40,8 +40,8 @@ ContainerName=artifact-server
 # If you want to restrict exposure, change this to your specific LAN IP.
 PublishPort=0.0.0.0:8080:80
 
-# Mount artifacts volume (read-only)
-Volume=yocto-artifacts:/srv:ro,Z
+# Mount shared artifacts directory (read-only)
+Volume=%h/.local/share/yocto-artifacts:/srv:ro,Z
 
 # Run the caddy container in file-server mode.
 # Use Exec= so the command is placed after the image in the generated podman run.

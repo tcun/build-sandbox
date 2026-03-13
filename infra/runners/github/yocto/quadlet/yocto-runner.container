@@ -28,10 +28,9 @@ Volume=yocto-sstate:/cache/sstate-cache:Z
 Volume=yocto-sources:/cache/sources:Z
 Volume=yocto-workdir:/home/runner/work:Z
 Volume=%h/.config/yocto-runner/keys:/run/yocto-ssh:ro,Z
-# Local artifact storage for dev builds
-# Mount at /srv (same as artifact-server) so we can create/manage subdirs as the
-# unprivileged 'runner' user without needing to chown the volume root.
-Volume=yocto-artifacts:/srv:Z
+# Local artifact storage for dev builds.
+# Keep this host path aligned with artifact-server.container.
+Volume=%h/.local/share/yocto-artifacts:/srv/yocto-artifacts:Z
 
 # Resource limits
 PodmanArgs=--memory=32g
