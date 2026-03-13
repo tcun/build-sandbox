@@ -3,7 +3,7 @@ LICENSE = "CLOSED"
 
 inherit cargo
 
-PV = "${@d.getVar('VERSION') or '0.1.0-alpha'}"
+PV = "${@d.getVar('TCUN_VERSION') or '0.1.0-alpha'}"
 
 # Immutable source inputs for reproducible builds:
 # - SOURCE_BRANCH chooses the git stream

@@ -35,8 +35,8 @@ release tag="":
     echo "BUILD_VERSION=$BUILD_VERSION"; \
     echo "SOURCE_REV=$SOURCE_REV"; \
     just rust::ci; \
-    VERSION="$VERSION" BUILD_VERSION="$BUILD_VERSION" SOURCE_REV="$SOURCE_REV" just yocto::preflight-source qemux86-64 release minimal; \
-    VERSION="$VERSION" BUILD_VERSION="$BUILD_VERSION" SOURCE_REV="$SOURCE_REV" just yocto::build qemux86-64 release minimal
+    TCUN_VERSION="$VERSION" TCUN_BUILD_VERSION="$BUILD_VERSION" SOURCE_REV="$SOURCE_REV" just yocto::preflight-source qemux86-64 release minimal; \
+    TCUN_VERSION="$VERSION" TCUN_BUILD_VERSION="$BUILD_VERSION" SOURCE_REV="$SOURCE_REV" just yocto::build qemux86-64 release minimal
 
 # Canonical Yocto test build for smoke-core source policy verification.
 yocto-test:
@@ -47,5 +47,5 @@ yocto-test:
     echo "VERSION=$VERSION"; \
     echo "BUILD_VERSION=$BUILD_VERSION"; \
     echo "SOURCE_REV=$SOURCE_REV"; \
-    VERSION="$VERSION" BUILD_VERSION="$BUILD_VERSION" SOURCE_REV="$SOURCE_REV" just yocto::preflight-source qemux86-64 test minimal; \
-    VERSION="$VERSION" BUILD_VERSION="$BUILD_VERSION" SOURCE_REV="$SOURCE_REV" just yocto::build qemux86-64 test minimal
+    TCUN_VERSION="$VERSION" TCUN_BUILD_VERSION="$BUILD_VERSION" SOURCE_REV="$SOURCE_REV" just yocto::preflight-source qemux86-64 test minimal; \
+    TCUN_VERSION="$VERSION" TCUN_BUILD_VERSION="$BUILD_VERSION" SOURCE_REV="$SOURCE_REV" just yocto::build qemux86-64 test minimal
