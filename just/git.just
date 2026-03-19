@@ -42,6 +42,21 @@ workspace-version:
     } \
   ' {{APPS_CARGO_TOML}}
 
+# Update workspace version in apps/Cargo.toml.
+set-workspace-version version:
+  @VERSION="{{version}}"; \
+  awk -v version="$VERSION" ' \
+    BEGIN { in_ws = 0 } \
+    /^\[workspace\.package\]/ { in_ws = 1; print; next } \
+    /^\[/ && in_ws { in_ws = 0 } \
+    in_ws && $1 == "version" && $2 == "=" { \
+      print "version = \"" version "\""; \
+      next \
+    } \
+    { print } \
+  ' {{APPS_CARGO_TOML}} > {{APPS_CARGO_TOML}}.tmp; \
+  mv {{APPS_CARGO_TOML}}.tmp {{APPS_CARGO_TOML}}
+
 # Validate that the provided release tag matches workspace Cargo version and is annotated.
 assert-tag-matches-workspace tag="":
   @TAG="{{tag}}"; \
@@ -70,6 +85,21 @@ assert-tag-matches-workspace tag="":
   fi; \
   echo "ok: tag '$TAG' matches workspace version '$WORKSPACE_VERSION'"
 
+# Validate RC tag format and annotation.
+assert-rc-tag tag:
+  @TAG="{{tag}}"; \
+  TAG="${TAG#refs/tags/}"; \
+  if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then \
+    echo "error: candidate tag '$TAG' must match v<major>.<minor>.<patch>-rc.<n>" >&2; \
+    exit 1; \
+  fi; \
+  OBJ_TYPE="$(git -C {{ROOT_DIR}} cat-file -t "$TAG" 2>/dev/null || true)"; \
+  if [[ "$OBJ_TYPE" != "tag" ]]; then \
+    echo "error: '$TAG' is not an annotated tag" >&2; \
+    exit 1; \
+  fi; \
+  echo "ok: rc tag '$TAG' is annotated and well-formed"
+
 # Print VERSION and BUILD_VERSION derived from an explicit release tag.
 release-env tag="":
   @TAG="{{tag}}"; \
@@ -87,54 +117,117 @@ release-env tag="":
   echo "VERSION=$VERSION"; \
   echo "BUILD_VERSION=$BUILD_VERSION"
 
-# Update workspace version, commit, and create an annotated tag.
-# Example: just git::cut v0.1.0-alpha
-cut tag:
-  @TAG="{{tag}}"; \
-  if [[ "$TAG" != v* ]]; then \
-    TAG="v$TAG"; \
-  fi; \
-  if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then \
-    echo "error: tag '$TAG' is not valid semver with 'v' prefix" >&2; \
+# Validate base version input for release-candidate command.
+assert-base-version base:
+  @BASE="{{base}}"; \
+  if [[ "$BASE" == v* ]]; then \
+    echo "error: pass base semver without 'v' prefix (example: 1.2.3)" >&2; \
     exit 1; \
   fi; \
-  if git -C {{ROOT_DIR}} rev-parse "$TAG" >/dev/null 2>&1; then \
-    echo "error: tag '$TAG' already exists" >&2; \
+  if [[ "$BASE" =~ -rc\.[0-9]+$ ]]; then \
+    echo "error: pass base semver only; RC suffix is auto-generated" >&2; \
     exit 1; \
   fi; \
-  VERSION="${TAG#v}"; \
-  awk -v version="$VERSION" ' \
-    BEGIN { in_ws = 0 } \
-    /^\[workspace\.package\]/ { in_ws = 1; print; next } \
-    /^\[/ && in_ws { in_ws = 0 } \
-    in_ws && $1 == "version" && $2 == "=" { \
-      print "version = \"" version "\""; \
-      next \
-    } \
-    { print } \
-  ' {{APPS_CARGO_TOML}} > {{APPS_CARGO_TOML}}.tmp; \
-  mv {{APPS_CARGO_TOML}}.tmp {{APPS_CARGO_TOML}}; \
+  if [[ ! "$BASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then \
+    echo "error: base version '$BASE' must match <major>.<minor>.<patch>" >&2; \
+    exit 1; \
+  fi
+
+# Require a clean tracked working tree before cutting a release-candidate commit.
+assert-clean-working-tree:
+  @cd {{ROOT_DIR}}; \
+  git diff --quiet || { echo "error: working tree has unstaged changes" >&2; exit 1; }; \
+  git diff --cached --quiet || { echo "error: index has staged changes" >&2; exit 1; }
+
+# Compute the next RC tag for a base version (e.g. 1.2.3 -> v1.2.3-rc.4).
+next-rc-tag base:
+  @BASE="{{base}}"; \
+  just --justfile {{ROOT_DIR}}/Justfile git::assert-base-version "$BASE" >/dev/null; \
+  MAX_RC=0; \
+  while IFS= read -r TAG; do \
+    [[ -n "$TAG" ]] || continue; \
+    N="${TAG##*-rc.}"; \
+    if [[ "$N" =~ ^[0-9]+$ ]] && (( N > MAX_RC )); then \
+      MAX_RC="$N"; \
+    fi; \
+  done < <(git -C {{ROOT_DIR}} tag -l "v${BASE}-rc.*"); \
+  NEXT_RC=$((MAX_RC + 1)); \
+  echo "v${BASE}-rc.${NEXT_RC}"
+
+# Cut and push the next release-candidate tag for a base version.
+# Creates a dedicated release commit even when version is unchanged.
+release-candidate-publish base remote="origin":
+  @BASE="{{base}}"; \
+  REMOTE="{{remote}}"; \
+  just --justfile {{ROOT_DIR}}/Justfile git::assert-base-version "$BASE"; \
+  just --justfile {{ROOT_DIR}}/Justfile git::assert-clean-working-tree; \
+  git -C {{ROOT_DIR}} fetch --force --tags "$REMOTE" "+refs/tags/*:refs/tags/*"; \
+  RC_TAG="$(just --justfile {{ROOT_DIR}}/Justfile git::next-rc-tag "$BASE")"; \
+  RC_VERSION="${RC_TAG#v}"; \
+  if git -C {{ROOT_DIR}} rev-parse "$RC_TAG" >/dev/null 2>&1; then \
+    echo "error: tag '$RC_TAG' already exists" >&2; \
+    exit 1; \
+  fi; \
+  just --justfile {{ROOT_DIR}}/Justfile git::set-workspace-version "$RC_VERSION"; \
   just --justfile {{ROOT_DIR}}/Justfile rust::check; \
   git -C {{ROOT_DIR}} add apps/Cargo.toml; \
   if [[ -f {{ROOT_DIR}}/apps/Cargo.lock ]]; then \
     git -C {{ROOT_DIR}} add apps/Cargo.lock; \
   fi; \
-  if git -C {{ROOT_DIR}} diff --cached --quiet; then \
-    echo "info: workspace version already '$VERSION'"; \
-  else \
-    git -C {{ROOT_DIR}} commit -m "release: $TAG"; \
+  git -C {{ROOT_DIR}} commit --allow-empty -m "release: $RC_TAG"; \
+  git -C {{ROOT_DIR}} tag -a "$RC_TAG" -m "Release candidate $RC_TAG"; \
+  BRANCH="$(git -C {{ROOT_DIR}} symbolic-ref --quiet --short HEAD || true)"; \
+  if [[ -z "$BRANCH" ]]; then \
+    echo "error: current HEAD is detached; checkout a branch before publishing" >&2; \
+    exit 1; \
   fi; \
-  git -C {{ROOT_DIR}} tag -a "$TAG" -m "Release $TAG"; \
-  echo "created annotated tag $TAG"
+  git -C {{ROOT_DIR}} push "$REMOTE" "$BRANCH" "$RC_TAG"; \
+  echo "RC_TAG=$RC_TAG"; \
+  echo "RC_VERSION=$RC_VERSION"; \
+  echo "BRANCH=$BRANCH"
 
-# Cut a release and push branch+annotated tag to remote.
-# Example: just git::publish v0.1.0-alpha
-publish tag remote="origin":
-  @TAG="{{tag}}"; \
-  if [[ "$TAG" != v* ]]; then \
-    TAG="v$TAG"; \
+# Create (or verify) stable release tag from an existing candidate tag.
+# Fails if the stable tag exists on a different commit.
+promote-tag candidate_tag release_version remote="origin":
+  @CANDIDATE_TAG_RAW="{{candidate_tag}}"; \
+  RELEASE_VERSION_RAW="{{release_version}}"; \
+  REMOTE="{{remote}}"; \
+  CANDIDATE_TAG="${CANDIDATE_TAG_RAW#refs/tags/}"; \
+  RELEASE_VERSION="${RELEASE_VERSION_RAW#v}"; \
+  STABLE_TAG="v${RELEASE_VERSION}"; \
+  if [[ ! "$CANDIDATE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then \
+    echo "error: candidate tag '$CANDIDATE_TAG' must match v<major>.<minor>.<patch>-rc.<n>" >&2; \
+    exit 1; \
   fi; \
-  just --justfile {{ROOT_DIR}}/Justfile git::cut "$TAG"; \
-  BRANCH="$(git -C {{ROOT_DIR}} symbolic-ref --quiet --short HEAD)"; \
-  git -C {{ROOT_DIR}} push "{{remote}}" "$BRANCH" --follow-tags; \
-  echo "pushed branch '$BRANCH' and annotated tags to '{{remote}}'"
+  if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then \
+    echo "error: release version '$RELEASE_VERSION_RAW' must match <major>.<minor>.<patch>" >&2; \
+    exit 1; \
+  fi; \
+  git -C {{ROOT_DIR}} fetch --force --tags "$REMOTE" "+refs/tags/*:refs/tags/*"; \
+  OBJ_TYPE="$(git -C {{ROOT_DIR}} cat-file -t "$CANDIDATE_TAG" 2>/dev/null || true)"; \
+  if [[ "$OBJ_TYPE" != "tag" ]]; then \
+    echo "error: candidate tag '$CANDIDATE_TAG' must exist and be annotated" >&2; \
+    exit 1; \
+  fi; \
+  CANDIDATE_COMMIT="$(git -C {{ROOT_DIR}} rev-list -n1 "$CANDIDATE_TAG")"; \
+  TAG_CREATED="false"; \
+  if git -C {{ROOT_DIR}} rev-parse "$STABLE_TAG" >/dev/null 2>&1; then \
+    STABLE_OBJ_TYPE="$(git -C {{ROOT_DIR}} cat-file -t "$STABLE_TAG" 2>/dev/null || true)"; \
+    if [[ "$STABLE_OBJ_TYPE" != "tag" ]]; then \
+      echo "error: existing stable tag '$STABLE_TAG' must be annotated" >&2; \
+      exit 1; \
+    fi; \
+    STABLE_COMMIT="$(git -C {{ROOT_DIR}} rev-list -n1 "$STABLE_TAG")"; \
+    if [[ "$STABLE_COMMIT" != "$CANDIDATE_COMMIT" ]]; then \
+      echo "error: stable tag '$STABLE_TAG' exists at $STABLE_COMMIT (candidate commit is $CANDIDATE_COMMIT)" >&2; \
+      exit 1; \
+    fi; \
+    echo "info: stable tag '$STABLE_TAG' already points to candidate commit" >&2; \
+  else \
+    git -C {{ROOT_DIR}} tag -a "$STABLE_TAG" "$CANDIDATE_COMMIT" -m "Release $STABLE_TAG (promoted from $CANDIDATE_TAG)"; \
+    git -C {{ROOT_DIR}} push "$REMOTE" "$STABLE_TAG"; \
+    TAG_CREATED="true"; \
+  fi; \
+  echo "STABLE_TAG=$STABLE_TAG"; \
+  echo "CANDIDATE_COMMIT=$CANDIDATE_COMMIT"; \
+  echo "TAG_CREATED=$TAG_CREATED"

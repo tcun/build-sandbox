@@ -198,35 +198,44 @@ For tagged releases, CI should additionally enforce:
 1. the tag is annotated
 2. the tag version (without `v`) matches `[workspace.package].version` in `apps/Cargo.toml`
 
-Template release command:
+Template release-candidate command:
 
 ```bash
-just ci::release v0.1.0
+just release-candidate 1.2.3
 ```
 
-In this template, `ci::release` runs:
+In this template, RC flow runs:
 
-1. tag/workspace version validation
-2. Rust CI build
-3. Yocto release build with the same `VERSION`/`BUILD_VERSION`
+1. derive next candidate tag (`v1.2.3-rc.N`)
+2. update workspace version to `1.2.3-rc.N`
+3. create dedicated release-candidate commit and annotated RC tag
+4. push branch + RC tag
+5. build and publish canonical RC artifacts from the RC tag
 
-To cut a release commit, create an annotated tag, and push branch+tag:
+Promotion is a separate manual workflow that:
 
-```bash
-just release v0.1.0-alpha
-```
+1. verifies candidate artifacts and checksums
+2. promotes artifacts atomically to stable release paths (no rebuild)
+3. creates or verifies stable tag `v1.2.3` at the candidate commit
+4. publishes GitHub release metadata
 
 ## End-To-End Flow
 
 ```text
-just release v0.1.0
-  -> CI triggered from tag
-  -> VERSION=0.1.0
-  -> BUILD_VERSION=0.1.0+0.gabcdef0 (or +<distance>.g<sha> for non-tag builds)
+just release-candidate 1.2.3
+  -> creates/pushes v1.2.3-rc.N
+  -> RC CI triggered from candidate tag
+  -> VERSION=1.2.3-rc.N
+  -> BUILD_VERSION=1.2.3-rc.N+0.gabcdef0
   -> kas/bitbake receives VERSION
   -> Yocto recipes set PV from VERSION
-  -> Rust workspace uses version 0.1.0
+  -> Rust workspace uses version 1.2.3-rc.N
   -> runtime can report BUILD_VERSION
+promote-candidate workflow
+  -> verifies candidate checksums and manifest
+  -> atomically copies candidate artifacts to stable release path
+  -> ensures stable tag points to same commit
+  -> no rebuild occurs
 ```
 
 ## Verification
@@ -259,9 +268,9 @@ For a local non-release build, the expected values are:
 
 ## Open Questions
 
-These decisions are intentionally left open for the template user:
+Current default decisions in this template:
 
-1. Whether CI should build on every commit, only on tags, or both.
-2. Whether pre-release tags should map to different image or artifact sets.
-3. Whether runtime version output should include commit SHA, build date, or both.
-4. Whether local developer builds should be allowed to publish artifacts.
+1. Keep push/PR validation CI enabled, and add manual profile builds (`dev`, `test`).
+2. Build immutable candidate artifacts from RC tags only.
+3. Promote to stable without rebuild.
+4. Allow local/manual profile artifact publication into structured paths.

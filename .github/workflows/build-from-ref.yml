@@ -1,0 +1,125 @@
+name: Build From Ref
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Build profile
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - test
+      requested_ref:
+        description: Branch, tag, or commit SHA to build
+        required: false
+        default: main
+        type: string
+      machine:
+        description: Yocto machine
+        required: true
+        default: qemux86-64
+        type: string
+      run_simulator:
+        description: Run simulator boot validation (recommended for test profile)
+        required: true
+        default: true
+        type: boolean
+      publish_artifacts:
+        description: Publish build artifacts to artifact root
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: build-from-ref-${{ github.workflow }}-${{ inputs.profile }}-${{ inputs.requested_ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ inputs.profile }} build from ref
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - yocto
+
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ inputs.requested_ref || github.ref_name }}
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Guard private key tracking
+        run: just ci::guard-no-private-keys
+
+      - name: Ensure kas is available
+        run: |
+          if ! command -v kas >/dev/null 2>&1; then
+            pipx install kas
+          fi
+
+      - name: Resolve requested and actual commit
+        id: resolve
+        run: |
+          REQUESTED_REF="${{ inputs.requested_ref }}"
+          if [[ -z "$REQUESTED_REF" ]]; then
+            REQUESTED_REF="${GITHUB_REF_NAME:-main}"
+          fi
+
+          RESOLVED_COMMIT="$(git rev-parse HEAD)"
+          BRANCH_OR_REF="$(git branch --show-current || true)"
+          if [[ -z "$BRANCH_OR_REF" ]]; then
+            BRANCH_OR_REF="$REQUESTED_REF"
+          fi
+
+          echo "requested_ref=$REQUESTED_REF" >> "$GITHUB_OUTPUT"
+          echo "resolved_commit=$RESOLVED_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "branch_or_ref=$BRANCH_OR_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Run profile build
+        run: |
+          just ci::build-profile \
+            "${{ inputs.profile }}" \
+            "${{ inputs.machine }}" \
+            "${{ steps.resolve.outputs.requested_ref }}" \
+            "${{ steps.resolve.outputs.resolved_commit }}" \
+            "${{ inputs.run_simulator }}"
+
+      - name: Publish artifacts
+        id: publish
+        if: ${{ inputs.publish_artifacts }}
+        run: |
+          OUT="$(just infra::artifact-publish-profile \
+            "${{ inputs.profile }}" \
+            "${{ inputs.machine }}" \
+            "${{ steps.resolve.outputs.requested_ref }}" \
+            "${{ steps.resolve.outputs.resolved_commit }}" \
+            "${{ github.run_id }}" \
+            "${{ steps.resolve.outputs.branch_or_ref }}")"
+          echo "$OUT"
+          URL="$(echo "$OUT" | awk -F= '/^URL=/{print $2; exit}')"
+          DEST_REL="$(echo "$OUT" | awk -F= '/^DEST_REL=/{print $2; exit}')"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "dest_rel=$DEST_REL" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Build From Ref"
+            echo ""
+            echo "- Profile: \`${{ inputs.profile }}\`"
+            echo "- Requested ref: \`${{ steps.resolve.outputs.requested_ref }}\`"
+            echo "- Resolved commit: \`${{ steps.resolve.outputs.resolved_commit }}\`"
+            echo "- Machine: \`${{ inputs.machine }}\`"
+            if [[ "${{ inputs.publish_artifacts }}" == "true" ]]; then
+              echo "- Artifact path: \`${{ steps.publish.outputs.dest_rel }}\`"
+              echo "- Artifact URL: ${{ steps.publish.outputs.url }}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

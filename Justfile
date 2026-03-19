@@ -10,11 +10,19 @@ mod infra "just/infra.just"
 default:
   @just --list --justfile {{justfile()}}
 
-# Prepare a release commit/tag, then push branch and tag(s).
-# Usage: just release v0.1.0-alpha
-release tag:
-  @just git::publish "{{tag}}"
+# Local developer build profile.
+build-dev machine="qemux86-64":
+  @REQUESTED_REF="$(git -C {{justfile_directory()}} symbolic-ref --quiet --short HEAD || echo detached-head)"; \
+    RESOLVED_COMMIT="$(git -C {{justfile_directory()}} rev-parse HEAD)"; \
+    just ci::build-profile "dev" "{{machine}}" "$REQUESTED_REF" "$RESOLVED_COMMIT" "false"
 
-# Local-only release cut without pushing.
-release-local tag:
-  @just git::cut "{{tag}}"
+# Local validation build profile (canonical source rules + test gates).
+build-test machine="qemux86-64" simulator="true":
+  @REQUESTED_REF="$(git -C {{justfile_directory()}} symbolic-ref --quiet --short HEAD || echo detached-head)"; \
+    RESOLVED_COMMIT="$(git -C {{justfile_directory()}} rev-parse HEAD)"; \
+    just ci::build-profile "test" "{{machine}}" "$REQUESTED_REF" "$RESOLVED_COMMIT" "{{simulator}}"
+
+# Cut and push the next release-candidate tag for a base version.
+# Example: just release-candidate 1.2.3
+release-candidate base_version remote="origin":
+  @just git::release-candidate-publish "{{base_version}}" "{{remote}}"

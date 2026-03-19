@@ -11,7 +11,9 @@ on:
       - "apps/**"
       - "Justfile"
       - ".github/workflows/yocto-test.yml"
-      - ".github/workflows/release-tag.yml"
+      - ".github/workflows/release-candidate.yml"
+      - ".github/workflows/build-from-ref.yml"
+      - ".github/workflows/promote-candidate.yml"
   pull_request:
     paths:
       - "bsp/yocto/**"
@@ -20,7 +22,9 @@ on:
       - "apps/**"
       - "Justfile"
       - ".github/workflows/yocto-test.yml"
-      - ".github/workflows/release-tag.yml"
+      - ".github/workflows/release-candidate.yml"
+      - ".github/workflows/build-from-ref.yml"
+      - ".github/workflows/promote-candidate.yml"
 
 concurrency:
   group: yocto-test-${{ github.workflow }}-${{ github.ref }}

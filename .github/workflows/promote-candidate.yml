@@ -1,0 +1,99 @@
+name: Promote Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_tag:
+        description: "Candidate tag to promote (example: v1.2.3-rc.1)"
+        required: true
+        type: string
+      release_version:
+        description: "Stable release version (example: 1.2.3)"
+        required: true
+        type: string
+      machine:
+        description: Yocto machine
+        required: true
+        default: qemux86-64
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-candidate-${{ inputs.release_version }}-${{ inputs.machine }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: promote candidate to stable
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - yocto
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Guard private key tracking
+        run: just ci::guard-no-private-keys
+
+      - name: Promote candidate artifacts and stable tag
+        id: promote
+        run: |
+          OUT="$(just ci::promote-candidate \
+            "${{ inputs.candidate_tag }}" \
+            "${{ inputs.release_version }}" \
+            "${{ inputs.machine }}" \
+            origin)"
+          echo "$OUT"
+
+          STABLE_TAG="$(echo "$OUT" | awk -F= '/^STABLE_TAG=/{print $2; exit}')"
+          CANDIDATE_COMMIT="$(echo "$OUT" | awk -F= '/^CANDIDATE_COMMIT=/{print $2; exit}')"
+          PROMOTION_URL="$(echo "$OUT" | awk -F= '/^PROMOTION_URL=/{print $2; exit}')"
+
+          [[ -n "$STABLE_TAG" ]] || { echo "missing STABLE_TAG in promote output" >&2; exit 1; }
+          [[ -n "$CANDIDATE_COMMIT" ]] || { echo "missing CANDIDATE_COMMIT in promote output" >&2; exit 1; }
+
+          echo "stable_tag=$STABLE_TAG" >> "$GITHUB_OUTPUT"
+          echo "candidate_commit=$CANDIDATE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "promotion_url=$PROMOTION_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.promote.outputs.stable_tag }}
+          target_commitish: ${{ steps.promote.outputs.candidate_commit }}
+          name: Release ${{ steps.promote.outputs.stable_tag }}
+          body: |
+            Promoted from candidate `${{ inputs.candidate_tag }}`.
+
+            - Stable tag: `${{ steps.promote.outputs.stable_tag }}`
+            - Candidate commit: `${{ steps.promote.outputs.candidate_commit }}`
+            - Machine: `${{ inputs.machine }}`
+            - Artifacts: ${{ steps.promote.outputs.promotion_url }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+          allow_updates: true
+          append_body: true
+
+      - name: Summary
+        run: |
+          {
+            echo "### Candidate Promotion"
+            echo ""
+            echo "- Candidate tag: \`${{ inputs.candidate_tag }}\`"
+            echo "- Stable tag: \`${{ steps.promote.outputs.stable_tag }}\`"
+            echo "- Candidate commit: \`${{ steps.promote.outputs.candidate_commit }}\`"
+            echo "- Release artifacts: ${{ steps.promote.outputs.promotion_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"

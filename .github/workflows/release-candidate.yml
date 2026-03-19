@@ -1,0 +1,81 @@
+name: Release Candidate Build
+
+on:
+  push:
+    tags:
+      - "v*.*.*-rc.*"
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-candidate:
+    name: build rc artifacts
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - yocto
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Guard private key tracking
+        run: just ci::guard-no-private-keys
+
+      - name: Ensure kas is available
+        run: |
+          if ! command -v kas >/dev/null 2>&1; then
+            pipx install kas
+          fi
+
+      - name: Cache cargo registries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('apps/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-
+
+      - name: Run RC build pipeline
+        run: just ci::release-candidate "${{ github.ref_name }}" qemux86-64
+
+      - name: Publish candidate artifacts
+        id: publish
+        run: |
+          RESOLVED_COMMIT="$(git rev-parse HEAD)"
+          OUT="$(just infra::artifact-publish-profile \
+            candidate \
+            qemux86-64 \
+            "${{ github.ref_name }}" \
+            "$RESOLVED_COMMIT" \
+            "${{ github.run_id }}" \
+            "${{ github.ref_name }}" \
+            "${{ github.ref_name }}")"
+          echo "$OUT"
+          URL="$(echo "$OUT" | awk -F= '/^URL=/{print $2; exit}')"
+          DEST_REL="$(echo "$OUT" | awk -F= '/^DEST_REL=/{print $2; exit}')"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "dest_rel=$DEST_REL" >> "$GITHUB_OUTPUT"
+          echo "resolved_commit=$RESOLVED_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Release Candidate"
+            echo ""
+            echo "- Candidate tag: \`${{ github.ref_name }}\`"
+            echo "- Commit: \`${{ steps.publish.outputs.resolved_commit }}\`"
+            echo "- Artifact path: \`${{ steps.publish.outputs.dest_rel }}\`"
+            echo "- Artifact URL: ${{ steps.publish.outputs.url }}"
+          } >> "$GITHUB_STEP_SUMMARY"

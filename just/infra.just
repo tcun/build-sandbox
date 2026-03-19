@@ -7,6 +7,9 @@ DEFAULT_ARTIFACT_STACK := "services/artifact-server"
 RUNNER_ENV_FILE := ROOT_DIR + "/infra/runners/github/yocto/.env"
 RUNNER_ENV_EXAMPLE := ROOT_DIR + "/infra/runners/github/yocto/.env.example"
 RUST_TOOLCHAIN_FILE := ROOT_DIR + "/apps/rust-toolchain.toml"
+ARTIFACT_PUBLISH_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/publish-artifacts.sh"
+ARTIFACT_PROMOTE_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/promote-candidate.sh"
+ARTIFACT_RETENTION_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/cleanup-artifacts.sh"
 
 # Generic: start one compose stack under infra/.
 # Example: just infra::stack-up stack=runners/github/yocto build=true
@@ -79,36 +82,114 @@ logs stack="" tail="200" follow="false":
       just --justfile {{ROOT_DIR}}/Justfile infra::stack-logs "{{DEFAULT_ARTIFACT_STACK}}" "{{tail}}" "{{follow}}"; \
     fi
 
-# Publish local Yocto deploy artifacts into the shared artifact volume.
-# This keeps local/manual builds discoverable from the same artifact server.
-# Example: just infra::artifact-publish
-# Example: just infra::artifact-publish qemux86-64 dev mybuild
-artifact-publish machine="qemux86-64" variant="dev" label="" src_dir="" artifact_root="":
-  @SOURCE_DIR="{{src_dir}}"; \
-    if [[ -z "$SOURCE_DIR" ]]; then \
-      SOURCE_DIR="{{ROOT_DIR}}/build/yocto/build/{{machine}}-{{variant}}/tmp/deploy/images/{{machine}}"; \
-    fi; \
+# Publish build artifacts into standardized profile paths.
+# Profiles:
+# - dev:        artifacts/dev/<ref>/<sha>/<machine>/
+# - test:       artifacts/test/<ref>/<run-id>/<machine>/
+# - candidate:  artifacts/candidates/<candidate-tag>/<machine>/
+artifact-publish-profile profile machine="qemux86-64" requested_ref="" resolved_commit="" workflow_run_id="" branch_or_ref="" candidate_tag="" src_dir="" artifact_root="":
+  @PROFILE="{{profile}}"; \
+    MACHINE="{{machine}}"; \
+    REQUESTED_REF="{{requested_ref}}"; \
+    RESOLVED_COMMIT="{{resolved_commit}}"; \
+    WORKFLOW_RUN_ID="{{workflow_run_id}}"; \
+    BRANCH_OR_REF="{{branch_or_ref}}"; \
+    CANDIDATE_TAG="{{candidate_tag}}"; \
+    SOURCE_DIR="{{src_dir}}"; \
+    ARTIFACT_ROOT_VALUE="{{artifact_root}}"; \
+    if [[ -z "$ARTIFACT_ROOT_VALUE" ]]; then ARTIFACT_ROOT_VALUE="${ARTIFACT_ROOT:-/srv/yocto-artifacts}"; fi; \
+    mkdir -p "$ARTIFACT_ROOT_VALUE"; \
+    [[ -w "$ARTIFACT_ROOT_VALUE" ]] || { echo "artifact root is not writable: $ARTIFACT_ROOT_VALUE" >&2; exit 1; }; \
+    if [[ -z "$REQUESTED_REF" ]]; then REQUESTED_REF="${GITHUB_REF_NAME:-local}"; fi; \
+    if [[ -z "$RESOLVED_COMMIT" ]]; then RESOLVED_COMMIT="$(git -C {{ROOT_DIR}} rev-parse HEAD)"; fi; \
+    if [[ -z "$BRANCH_OR_REF" ]]; then BRANCH_OR_REF="$REQUESTED_REF"; fi; \
+    SAFE_REF="$(echo "$REQUESTED_REF" | tr '/:@' '_' | tr -cd '[:alnum:]._-')"; \
+    if [[ -z "$SAFE_REF" ]]; then SAFE_REF="detached"; fi; \
+    case "$PROFILE" in \
+      dev) \
+        VARIANT="dev"; \
+        if [[ -z "$SOURCE_DIR" ]]; then SOURCE_DIR="{{ROOT_DIR}}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"; fi; \
+        DEST_REL="artifacts/dev/${SAFE_REF}/${RESOLVED_COMMIT}/${MACHINE}"; \
+        CANDIDATE_OR_REF="$REQUESTED_REF"; \
+        YOCTO_PROFILE="dev"; \
+        ;; \
+      test) \
+        VARIANT="test"; \
+        if [[ -z "$SOURCE_DIR" ]]; then SOURCE_DIR="{{ROOT_DIR}}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"; fi; \
+        if [[ -z "$WORKFLOW_RUN_ID" ]]; then WORKFLOW_RUN_ID="${GITHUB_RUN_ID:-$(date -u +%Y%m%d%H%M%S)}"; fi; \
+        DEST_REL="artifacts/test/${SAFE_REF}/${WORKFLOW_RUN_ID}/${MACHINE}"; \
+        CANDIDATE_OR_REF="$REQUESTED_REF"; \
+        YOCTO_PROFILE="test"; \
+        ;; \
+      candidate) \
+        VARIANT="release"; \
+        if [[ -z "$SOURCE_DIR" ]]; then SOURCE_DIR="{{ROOT_DIR}}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"; fi; \
+        if [[ -z "$CANDIDATE_TAG" ]]; then CANDIDATE_TAG="$REQUESTED_REF"; fi; \
+        [[ "$CANDIDATE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]] || { echo "candidate_tag must match v<major>.<minor>.<patch>-rc.<n>" >&2; exit 1; }; \
+        DEST_REL="artifacts/candidates/${CANDIDATE_TAG}/${MACHINE}"; \
+        CANDIDATE_OR_REF="$CANDIDATE_TAG"; \
+        YOCTO_PROFILE="release"; \
+        ;; \
+      *) \
+        echo "error: unsupported profile '$PROFILE' (expected dev|test|candidate)" >&2; \
+        exit 1; \
+        ;; \
+    esac; \
     [[ -d "$SOURCE_DIR" ]] || { echo "missing source artifacts dir: $SOURCE_DIR" >&2; exit 1; }; \
-    TAG="{{label}}"; \
-    if [[ -z "$TAG" ]]; then TAG="$(date -u +%Y%m%d%H%M%S)"; fi; \
-    ROOT_DIR_PUBLISH="{{artifact_root}}"; \
-    if [[ -z "$ROOT_DIR_PUBLISH" ]]; then ROOT_DIR_PUBLISH="${ARTIFACT_ROOT:-/srv/yocto-artifacts}"; fi; \
-    mkdir -p "$ROOT_DIR_PUBLISH"; \
-    [[ -w "$ROOT_DIR_PUBLISH" ]] || { \
-      echo "artifact root is not writable: $ROOT_DIR_PUBLISH" >&2; \
-      echo "set ARTIFACT_ROOT to a writable path for the runner user, then recreate runner container" >&2; \
-      exit 1; \
-    }; \
-    DEST_DIR="$ROOT_DIR_PUBLISH/local/{{variant}}/{{machine}}/$TAG"; \
-    mkdir -p "$DEST_DIR"; \
-    cp -a "$SOURCE_DIR"/. "$DEST_DIR"/; \
-    ln -sfn "$TAG" "$ROOT_DIR_PUBLISH/local/{{variant}}/{{machine}}/latest"; \
-    echo "Published: $DEST_DIR"; \
-    echo "URL: http://localhost:8080/local/{{variant}}/{{machine}}/$TAG/"
+    DEST_DIR="$ARTIFACT_ROOT_VALUE/$DEST_REL"; \
+    RUST_WORKSPACE_VERSION="$(just --justfile {{ROOT_DIR}}/Justfile git::workspace-version)"; \
+    RUNNER_IMAGE_OR_VERSION="${RUNNER_IMAGE:-${RUNNER_VERSION:-unknown}}"; \
+    "{{ARTIFACT_PUBLISH_SCRIPT}}" \
+      --source-dir "$SOURCE_DIR" \
+      --dest-dir "$DEST_DIR" \
+      --build-profile "$PROFILE" \
+      --machine "$MACHINE" \
+      --requested-ref "$REQUESTED_REF" \
+      --resolved-commit "$RESOLVED_COMMIT" \
+      --candidate-tag-or-ref "$CANDIDATE_OR_REF" \
+      --branch-or-ref "$BRANCH_OR_REF" \
+      --workflow-run-id "$WORKFLOW_RUN_ID" \
+      --yocto-profile "$YOCTO_PROFILE" \
+      --rust-workspace-version "$RUST_WORKSPACE_VERSION" \
+      --runner-image-or-version "$RUNNER_IMAGE_OR_VERSION"; \
+    HOST_VALUE="${ARTIFACT_HOST:-localhost:8080}"; \
+    echo "DEST_REL=$DEST_REL"; \
+    echo "URL=http://${HOST_VALUE}/${DEST_REL}/"
 
-# Print URL helper for published artifacts.
-artifact-url variant="dev" machine="qemux86-64" label="latest" host="localhost:8080":
-  @echo "http://{{host}}/local/{{variant}}/{{machine}}/{{label}}/"
+# Promote candidate artifacts to stable release path with atomic copy and checksum verification.
+artifact-promote-candidate candidate_tag release_tag machine="qemux86-64" candidate_commit="" artifact_root="":
+  @CANDIDATE_TAG="{{candidate_tag}}"; \
+    RELEASE_TAG="{{release_tag}}"; \
+    MACHINE="{{machine}}"; \
+    CANDIDATE_COMMIT="{{candidate_commit}}"; \
+    ARTIFACT_ROOT_VALUE="{{artifact_root}}"; \
+    if [[ -z "$ARTIFACT_ROOT_VALUE" ]]; then ARTIFACT_ROOT_VALUE="${ARTIFACT_ROOT:-/srv/yocto-artifacts}"; fi; \
+    [[ -w "$ARTIFACT_ROOT_VALUE" ]] || { echo "artifact root is not writable: $ARTIFACT_ROOT_VALUE" >&2; exit 1; }; \
+    ARGS=( \
+      --artifact-root "$ARTIFACT_ROOT_VALUE" \
+      --candidate-tag "$CANDIDATE_TAG" \
+      --release-tag "$RELEASE_TAG" \
+      --machine "$MACHINE" \
+    ); \
+    if [[ -n "$CANDIDATE_COMMIT" ]]; then \
+      ARGS+=(--candidate-commit "$CANDIDATE_COMMIT"); \
+    fi; \
+    "{{ARTIFACT_PROMOTE_SCRIPT}}" "${ARGS[@]}"; \
+    HOST_VALUE="${ARTIFACT_HOST:-localhost:8080}"; \
+    echo "URL=http://${HOST_VALUE}/artifacts/releases/${RELEASE_TAG}/${MACHINE}/"
+
+# Apply retention policy for non-release artifact trees.
+artifact-retention dev_days="14" test_days="30" candidate_days="90" artifact_root="":
+  @ARTIFACT_ROOT_VALUE="{{artifact_root}}"; \
+    if [[ -z "$ARTIFACT_ROOT_VALUE" ]]; then ARTIFACT_ROOT_VALUE="${ARTIFACT_ROOT:-/srv/yocto-artifacts}"; fi; \
+    "{{ARTIFACT_RETENTION_SCRIPT}}" "$ARTIFACT_ROOT_VALUE" "{{dev_days}}" "{{test_days}}" "{{candidate_days}}"
+
+# Print URL helper for relative artifact paths.
+artifact-url path host="localhost:8080":
+  @REL_PATH="{{path}}"; \
+    REL_PATH="${REL_PATH#/}"; \
+    [[ -n "$REL_PATH" ]] || { echo "error: path is required" >&2; exit 1; }; \
+    echo "http://{{host}}/${REL_PATH}/"
 
 # Convenience aliases for default runner/artifact stacks.
 runner-up:
