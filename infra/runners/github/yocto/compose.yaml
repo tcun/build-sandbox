@@ -33,6 +33,7 @@ services:
     container_name: ${RUNNER_CONTAINER_NAME:-yocto-runner}
     hostname: ${RUNNER_HOSTNAME:-yocto-runner-01}
     restart: unless-stopped
+    userns_mode: keep-id
     
     # Runner configuration via environment
     environment:

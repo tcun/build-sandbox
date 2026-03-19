@@ -2,6 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 ROOT_DIR := justfile_directory()
 YOCTO_TEST_GATES_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/test-gates.sh"
+PSEUDO_ENV_SANITIZE := "unset PSEUDO_DISABLED PSEUDO_PREFIX PSEUDO_LOCALSTATEDIR PSEUDO_PASSWD FAKEROOTKEY"
 
 # Prevent accidental leakage of private deploy keys into git history.
 guard-no-private-keys:
@@ -45,6 +46,7 @@ build-profile profile machine="qemux86-64" requested_ref="" resolved_commit="" r
     fi; \
     if [[ -z "$SOURCE_BRANCH_VALUE" ]]; then SOURCE_BRANCH_VALUE="main"; fi; \
     SHORT_SHA="$(git rev-parse --short=7 "$RESOLVED_COMMIT")"; \
+    {{PSEUDO_ENV_SANITIZE}}; \
     VERSION="0.0.0-${PROFILE}"; \
     BUILD_VERSION="${VERSION}+g${SHORT_SHA}"; \
     echo "PROFILE=$PROFILE"; \
@@ -74,6 +76,7 @@ release-candidate tag="" machine="qemux86-64":
     just git::assert-rc-tag "$TAG"; \
     just git::assert-tag-matches-workspace "$TAG"; \
     eval "$(just git::release-env "$TAG")"; \
+    {{PSEUDO_ENV_SANITIZE}}; \
     SOURCE_REV="$(git rev-parse HEAD)"; \
     SOURCE_BRANCH_VALUE="$(git for-each-ref --format='%(refname:short)' --contains "$SOURCE_REV" refs/remotes/origin | sed -n 's#^origin/##p' | head -n1 || true)"; \
     if [[ -z "$SOURCE_BRANCH_VALUE" ]]; then SOURCE_BRANCH_VALUE="main"; fi; \

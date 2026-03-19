@@ -20,6 +20,11 @@ if [[ "${RUNNER_TOKEN}" == "your_token_here" ]]; then
     RUNNER_TOKEN=""
 fi
 
+sanitize_yocto_env() {
+    # Guard against inherited host/job vars that break bitbake fakeroot tasks.
+    unset PSEUDO_DISABLED PSEUDO_PREFIX PSEUDO_LOCALSTATEDIR PSEUDO_PASSWD FAKEROOTKEY || true
+}
+
 configure_yocto_fetch_ssh() {
     local key_src="${YOCTO_FETCH_SSH_KEY}"
     local key_dst="${HOME}/.ssh/yocto_ci"
@@ -93,6 +98,8 @@ if [[ -z "${RUNNER_REPO}" ]]; then
     echo "       Format: owner/repo (e.g., BackburnerLabs/savers-aps)"
     exit 1
 fi
+
+sanitize_yocto_env
 
 if [[ -n "${YOCTO_FETCH_SSH_KEY}" ]]; then
     configure_yocto_fetch_ssh
