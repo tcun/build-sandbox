@@ -4,7 +4,7 @@ KAS_DIR := justfile_directory() / "bsp/yocto/kas"
 KAS_BASE := KAS_DIR / "base.yml"
 YOCTO_PREFLIGHT_SCRIPT := justfile_directory() / "bsp/yocto/scripts/preflight-source.sh"
 
-YOCTO_ROOT := justfile_directory() / "build/yocto"
+YOCTO_ROOT := env_var_or_default("YOCTO_ROOT", justfile_directory() / "build/yocto")
 KAS_SOURCES_DIR := YOCTO_ROOT / "sources"
 KAS_DOWNLOAD_DIR := YOCTO_ROOT / "downloads"
 KAS_SSTATE_DIR := YOCTO_ROOT / "sstate-cache"
@@ -28,6 +28,9 @@ build machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   if [[ "{{variant}}" == "dev" ]]; then \
     [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
     [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+    if [[ -z "$SOURCE_REV_VALUE" && -d "$SMOKE_CORE_EXTERNALSRC_VALUE/.git" ]]; then \
+      SOURCE_REV_VALUE="$(git -C "$SMOKE_CORE_EXTERNALSRC_VALUE" rev-parse HEAD)"; \
+    fi; \
   else \
     SMOKE_CORE_EXTERNALSRC_VALUE=""; \
     [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \
@@ -53,6 +56,9 @@ preflight-source machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_I
   if [[ "{{variant}}" == "dev" ]]; then \
     [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
     [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+    if [[ -z "$SOURCE_REV_VALUE" && -d "$SMOKE_CORE_EXTERNALSRC_VALUE/.git" ]]; then \
+      SOURCE_REV_VALUE="$(git -C "$SMOKE_CORE_EXTERNALSRC_VALUE" rev-parse HEAD)"; \
+    fi; \
   else \
     SMOKE_CORE_EXTERNALSRC_VALUE=""; \
     [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \
@@ -78,6 +84,9 @@ shell machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   if [[ "{{variant}}" == "dev" ]]; then \
     [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
     [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+    if [[ -z "$SOURCE_REV_VALUE" && -d "$SMOKE_CORE_EXTERNALSRC_VALUE/.git" ]]; then \
+      SOURCE_REV_VALUE="$(git -C "$SMOKE_CORE_EXTERNALSRC_VALUE" rev-parse HEAD)"; \
+    fi; \
   else \
     SMOKE_CORE_EXTERNALSRC_VALUE=""; \
     [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \
@@ -103,6 +112,9 @@ run machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   if [[ "{{variant}}" == "dev" ]]; then \
     [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
     [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+    if [[ -z "$SOURCE_REV_VALUE" && -d "$SMOKE_CORE_EXTERNALSRC_VALUE/.git" ]]; then \
+      SOURCE_REV_VALUE="$(git -C "$SMOKE_CORE_EXTERNALSRC_VALUE" rev-parse HEAD)"; \
+    fi; \
   else \
     SMOKE_CORE_EXTERNALSRC_VALUE=""; \
     [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \
@@ -128,6 +140,9 @@ fetch machine=DEFAULT_MACHINE variant=DEFAULT_VARIANT image=DEFAULT_IMAGE:
   if [[ "{{variant}}" == "dev" ]]; then \
     [[ "$SMOKE_CORE_EXTERNALSRC_VALUE" = /* ]] || { echo "SMOKE_CORE_EXTERNALSRC must be an absolute path for dev builds" >&2; exit 1; }; \
     [[ -d "$SMOKE_CORE_EXTERNALSRC_VALUE" ]] || { echo "SMOKE_CORE_EXTERNALSRC path does not exist: $SMOKE_CORE_EXTERNALSRC_VALUE" >&2; exit 1; }; \
+    if [[ -z "$SOURCE_REV_VALUE" && -d "$SMOKE_CORE_EXTERNALSRC_VALUE/.git" ]]; then \
+      SOURCE_REV_VALUE="$(git -C "$SMOKE_CORE_EXTERNALSRC_VALUE" rev-parse HEAD)"; \
+    fi; \
   else \
     SMOKE_CORE_EXTERNALSRC_VALUE=""; \
     [[ -n "$SOURCE_REV_VALUE" ]] || { echo "SOURCE_REV is required for variant '{{variant}}'" >&2; exit 1; }; \

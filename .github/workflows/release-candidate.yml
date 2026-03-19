@@ -12,6 +12,8 @@ concurrency:
 jobs:
   release-candidate:
     name: build rc artifacts
+    env:
+      YOCTO_ROOT: /home/runner/work/yocto-state
     runs-on:
       - self-hosted
       - linux

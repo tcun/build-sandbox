@@ -57,7 +57,7 @@ build-profile profile machine="qemux86-64" requested_ref="" resolved_commit="" r
     echo "BUILD_VERSION=$BUILD_VERSION"; \
     if [[ "$PROFILE" == "dev" ]]; then \
       just rust::check; \
-      TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" just yocto::build "$MACHINE" dev minimal; \
+      TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$RESOLVED_COMMIT" just yocto::build "$MACHINE" dev minimal; \
     else \
       just rust::ci; \
       TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$RESOLVED_COMMIT" just yocto::preflight-source "$MACHINE" test minimal; \

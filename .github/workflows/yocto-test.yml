@@ -37,6 +37,8 @@ concurrency:
 jobs:
   yocto-test:
     name: canonical yocto test gate
+    env:
+      YOCTO_ROOT: /home/runner/work/yocto-state
     runs-on:
       - self-hosted
       - linux

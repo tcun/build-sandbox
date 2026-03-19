@@ -39,6 +39,8 @@ concurrency:
 jobs:
   build:
     name: ${{ inputs.profile }} build from ref
+    env:
+      YOCTO_ROOT: /home/runner/work/yocto-state
     runs-on:
       - self-hosted
       - linux
