@@ -226,8 +226,8 @@ promote-tag candidate_tag release_version remote="origin":
     echo "error: current HEAD is detached; checkout the release branch before promoting" >&2; \
     exit 1; \
   fi; \
-  just --justfile {{ROOT_DIR}}/Justfile git::assert-clean-working-tree; \
-  git -C {{ROOT_DIR}} fetch --force --tags "$REMOTE" "+refs/tags/*:refs/tags/*"; \
+  just --justfile {{ROOT_DIR}}/Justfile git::assert-clean-working-tree >&2; \
+  git -C {{ROOT_DIR}} fetch --force --tags "$REMOTE" "+refs/tags/*:refs/tags/*" >&2; \
   OBJ_TYPE="$(git -C {{ROOT_DIR}} cat-file -t "$CANDIDATE_TAG" 2>/dev/null || true)"; \
   if [[ "$OBJ_TYPE" != "tag" ]]; then \
     echo "error: candidate tag '$CANDIDATE_TAG' must exist and be annotated" >&2; \
@@ -256,16 +256,16 @@ promote-tag candidate_tag release_version remote="origin":
     fi; \
     echo "info: stable tag '$STABLE_TAG' already promoted from candidate commit" >&2; \
   else \
-    just --justfile {{ROOT_DIR}}/Justfile git::set-workspace-version "$RELEASE_VERSION"; \
-    just --justfile {{ROOT_DIR}}/Justfile rust::check; \
-    git -C {{ROOT_DIR}} add apps/Cargo.toml; \
+    just --justfile {{ROOT_DIR}}/Justfile git::set-workspace-version "$RELEASE_VERSION" >&2; \
+    just --justfile {{ROOT_DIR}}/Justfile rust::check >&2; \
+    git -C {{ROOT_DIR}} add apps/Cargo.toml >&2; \
     if [[ -f {{ROOT_DIR}}/apps/Cargo.lock ]]; then \
-      git -C {{ROOT_DIR}} add apps/Cargo.lock; \
+      git -C {{ROOT_DIR}} add apps/Cargo.lock >&2; \
     fi; \
-    git -C {{ROOT_DIR}} commit -m "release: $STABLE_TAG"; \
+    git -C {{ROOT_DIR}} commit -m "release: $STABLE_TAG" >&2; \
     RELEASE_COMMIT="$(git -C {{ROOT_DIR}} rev-parse HEAD)"; \
-    git -C {{ROOT_DIR}} tag -a "$STABLE_TAG" -m "Release $STABLE_TAG (promoted from $CANDIDATE_TAG)"; \
-    git -C {{ROOT_DIR}} push "$REMOTE" "$BRANCH" "$STABLE_TAG"; \
+    git -C {{ROOT_DIR}} tag -a "$STABLE_TAG" -m "Release $STABLE_TAG (promoted from $CANDIDATE_TAG)" >&2; \
+    git -C {{ROOT_DIR}} push "$REMOTE" "$BRANCH" "$STABLE_TAG" >&2; \
     TAG_CREATED="true"; \
   fi; \
   echo "STABLE_TAG=$STABLE_TAG"; \
