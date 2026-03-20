@@ -36,6 +36,9 @@ concurrency:
   group: build-from-ref-${{ github.workflow }}-${{ inputs.profile }}-${{ inputs.requested_ref }}
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     name: ${{ inputs.profile }} build from ref

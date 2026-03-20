@@ -24,6 +24,9 @@ concurrency:
   group: promote-candidate-${{ inputs.release_version }}-${{ inputs.machine }}
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   promote:
     name: promote candidate to stable

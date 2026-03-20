@@ -9,6 +9,9 @@ concurrency:
   group: release-candidate-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   release-candidate:
     name: build rc artifacts
@@ -41,7 +44,7 @@ jobs:
           fi
 
       - name: Cache cargo registries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry

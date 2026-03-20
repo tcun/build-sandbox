@@ -21,6 +21,9 @@ concurrency:
   group: yocto-test-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   yocto-test:
     name: canonical yocto test gate
@@ -47,7 +50,7 @@ jobs:
         run: just ci::guard-no-private-keys
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
