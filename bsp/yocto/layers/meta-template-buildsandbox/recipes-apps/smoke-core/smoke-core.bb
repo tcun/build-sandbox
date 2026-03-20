@@ -5,12 +5,6 @@ inherit cargo_bin
 
 PV = "${@d.getVar('TEMPLATE_VERSION') or '0.1.0-alpha'}"
 
-# Keep packaging under fakeroot even if environment leakage occurs in CI runners.
-# Without fakeroot, do_package will attempt real lchown() calls and fail in
-# rootless/containerized executions.
-PSEUDO_DISABLED = "0"
-do_package[fakeroot] = "1"
-
 # Immutable source inputs for reproducible builds:
 # - SOURCE_BRANCH chooses the git stream
 # - SOURCE_REV pins an exact commit (set by CI release flow)

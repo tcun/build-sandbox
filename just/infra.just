@@ -2,6 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 ROOT_DIR := justfile_directory()
 INFRA_DIR := ROOT_DIR + "/infra"
+YOCTO_ROOT := env_var_or_default("YOCTO_ROOT", ROOT_DIR + "/build/yocto")
 DEFAULT_RUNNER_STACK := "runners/github/yocto"
 DEFAULT_ARTIFACT_STACK := "services/artifact-server"
 RUNNER_ENV_FILE := ROOT_DIR + "/infra/runners/github/yocto/.env"
@@ -108,14 +109,12 @@ artifact-publish-profile profile machine="qemux86-64" requested_ref="" resolved_
     case "$PROFILE" in \
       dev) \
         VARIANT="dev"; \
-        if [[ -z "$SOURCE_DIR" ]]; then SOURCE_DIR="{{ROOT_DIR}}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"; fi; \
         DEST_REL="artifacts/dev/${SAFE_REF}/${RESOLVED_COMMIT}/${MACHINE}"; \
         CANDIDATE_OR_REF="$REQUESTED_REF"; \
         YOCTO_PROFILE="dev"; \
         ;; \
       test) \
         VARIANT="test"; \
-        if [[ -z "$SOURCE_DIR" ]]; then SOURCE_DIR="{{ROOT_DIR}}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"; fi; \
         if [[ -z "$WORKFLOW_RUN_ID" ]]; then WORKFLOW_RUN_ID="${GITHUB_RUN_ID:-$(date -u +%Y%m%d%H%M%S)}"; fi; \
         DEST_REL="artifacts/test/${SAFE_REF}/${WORKFLOW_RUN_ID}/${MACHINE}"; \
         CANDIDATE_OR_REF="$REQUESTED_REF"; \
@@ -123,7 +122,6 @@ artifact-publish-profile profile machine="qemux86-64" requested_ref="" resolved_
         ;; \
       candidate) \
         VARIANT="release"; \
-        if [[ -z "$SOURCE_DIR" ]]; then SOURCE_DIR="{{ROOT_DIR}}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"; fi; \
         if [[ -z "$CANDIDATE_TAG" ]]; then CANDIDATE_TAG="$REQUESTED_REF"; fi; \
         [[ "$CANDIDATE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]] || { echo "candidate_tag must match v<major>.<minor>.<patch>-rc.<n>" >&2; exit 1; }; \
         DEST_REL="artifacts/candidates/${CANDIDATE_TAG}/${MACHINE}"; \
@@ -135,7 +133,33 @@ artifact-publish-profile profile machine="qemux86-64" requested_ref="" resolved_
         exit 1; \
         ;; \
     esac; \
-    [[ -d "$SOURCE_DIR" ]] || { echo "missing source artifacts dir: $SOURCE_DIR" >&2; exit 1; }; \
+    CANDIDATE_SOURCE_DIRS=(); \
+    if [[ -z "$SOURCE_DIR" ]]; then \
+      CANDIDATE_SOURCE_DIRS=( \
+        "${YOCTO_ROOT:-}/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}" \
+        "{{YOCTO_ROOT}}/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}" \
+        "{{ROOT_DIR}}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}" \
+      ); \
+      if [[ -n "${GITHUB_WORKSPACE:-}" ]]; then \
+        CANDIDATE_SOURCE_DIRS+=("${GITHUB_WORKSPACE}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"); \
+        CANDIDATE_SOURCE_DIRS+=("$(dirname "$GITHUB_WORKSPACE")/yocto-state/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"); \
+      fi; \
+      for candidate in "${CANDIDATE_SOURCE_DIRS[@]}"; do \
+        [[ -n "$candidate" ]] || continue; \
+        if [[ -d "$candidate" ]]; then \
+          SOURCE_DIR="$candidate"; \
+          break; \
+        fi; \
+      done; \
+    fi; \
+    if [[ ! -d "$SOURCE_DIR" ]]; then \
+      echo "missing source artifacts dir: $SOURCE_DIR" >&2; \
+      if [[ ${#CANDIDATE_SOURCE_DIRS[@]} -gt 0 ]]; then \
+        echo "checked candidate artifact directories:" >&2; \
+        for candidate in "${CANDIDATE_SOURCE_DIRS[@]}"; do echo "  - $candidate" >&2; done; \
+      fi; \
+      exit 1; \
+    fi; \
     DEST_DIR="$ARTIFACT_ROOT_VALUE/$DEST_REL"; \
     RUST_WORKSPACE_VERSION="$(just --justfile {{ROOT_DIR}}/Justfile git::workspace-version)"; \
     RUNNER_IMAGE_OR_VERSION="${RUNNER_IMAGE:-${RUNNER_VERSION:-unknown}}"; \

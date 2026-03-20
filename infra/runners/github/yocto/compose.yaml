@@ -53,11 +53,11 @@ services:
     # These dramatically speed up subsequent builds
     volumes:
       # Yocto download cache (source tarballs, ~20-50GB)
-      - yocto-downloads:/cache/downloads:Z
+      - yocto-downloads:/cache/downloads:Z,U
       # Yocto shared state cache (build artifacts, ~50-100GB)
-      - yocto-sstate:/cache/sstate-cache:Z
+      - yocto-sstate:/cache/sstate-cache:Z,U
       # Runner work directory (checkout + build, ~100GB+)
-      - yocto-workdir:/home/runner/work:Z
+      - yocto-workdir:/home/runner/work:Z,U
       # Shared artifact directory on host (served by separate Caddy stack)
       - ${ARTIFACT_ROOT:-/srv/yocto-artifacts}:/srv/yocto-artifacts:Z,U
       # SSH deploy key for canonical Yocto git fetches

@@ -22,7 +22,41 @@ fi
 
 sanitize_yocto_env() {
     # Guard against inherited host/job vars that break bitbake fakeroot tasks.
-    unset PSEUDO_DISABLED PSEUDO_PREFIX PSEUDO_LOCALSTATEDIR PSEUDO_PASSWD FAKEROOTKEY || true
+    unset PSEUDO_DISABLED PSEUDO_PREFIX PSEUDO_LOCALSTATEDIR PSEUDO_PASSWD FAKEROOTKEY BB_PRESERVE_ENV BB_ENV_PASSTHROUGH || true
+}
+
+ensure_writable_dir() {
+    local dir="$1"
+    local uid gid
+    uid="$(id -u)"
+    gid="$(id -g)"
+
+    mkdir -p "${dir}" 2>/dev/null || sudo mkdir -p "${dir}"
+
+    if ! touch "${dir}/.runner-write-test" 2>/dev/null; then
+        echo "WARN: ${dir} is not writable; attempting ownership repair." >&2
+        sudo chown -R "${uid}:${gid}" "${dir}" || true
+    fi
+
+    if ! touch "${dir}/.runner-write-test" 2>/dev/null; then
+        echo "ERROR: ${dir} is not writable by uid=${uid} gid=${gid}" >&2
+        ls -ld "${dir}" >&2 || true
+        exit 1
+    fi
+
+    rm -f "${dir}/.runner-write-test"
+}
+
+ensure_runner_workdir_writable() {
+    local workdir="${RUNNER_WORKDIR}"
+    ensure_writable_dir "${workdir}"
+    mkdir -p "${workdir}/_PipelineMapping" "${workdir}/_temp" "${workdir}/_actions" "${workdir}/_tool"
+}
+
+ensure_yocto_cache_dirs_writable() {
+    ensure_writable_dir "/cache/downloads"
+    ensure_writable_dir "/cache/sstate-cache"
+    ensure_writable_dir "/srv/yocto-artifacts"
 }
 
 configure_yocto_fetch_ssh() {
@@ -100,6 +134,8 @@ if [[ -z "${RUNNER_REPO}" ]]; then
 fi
 
 sanitize_yocto_env
+ensure_runner_workdir_writable
+ensure_yocto_cache_dirs_writable
 
 if [[ -n "${YOCTO_FETCH_SSH_KEY}" ]]; then
     configure_yocto_fetch_ssh

@@ -2,7 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 ROOT_DIR := justfile_directory()
 YOCTO_TEST_GATES_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/test-gates.sh"
-PSEUDO_ENV_SANITIZE := "unset PSEUDO_DISABLED PSEUDO_PREFIX PSEUDO_LOCALSTATEDIR PSEUDO_PASSWD FAKEROOTKEY"
+PSEUDO_ENV_SANITIZE := "unset PSEUDO_DISABLED PSEUDO_PREFIX PSEUDO_LOCALSTATEDIR PSEUDO_PASSWD FAKEROOTKEY BB_PRESERVE_ENV BB_ENV_PASSTHROUGH"
 
 # Prevent accidental leakage of private deploy keys into git history.
 guard-no-private-keys:
@@ -57,6 +57,7 @@ build-profile profile machine="qemux86-64" requested_ref="" resolved_commit="" r
     echo "BUILD_VERSION=$BUILD_VERSION"; \
     if [[ "$PROFILE" == "dev" ]]; then \
       just rust::check; \
+      TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$RESOLVED_COMMIT" just yocto::preflight-source "$MACHINE" dev minimal; \
       TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$RESOLVED_COMMIT" just yocto::build "$MACHINE" dev minimal; \
     else \
       just rust::ci; \
