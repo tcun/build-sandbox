@@ -161,6 +161,14 @@ release-candidate-publish base remote="origin":
   REMOTE="{{remote}}"; \
   just --justfile {{ROOT_DIR}}/Justfile git::assert-base-version "$BASE"; \
   just --justfile {{ROOT_DIR}}/Justfile git::assert-clean-working-tree; \
+  if ! git -C {{ROOT_DIR}} config --get user.name >/dev/null || ! git -C {{ROOT_DIR}} config --get user.email >/dev/null; then \
+    GIT_NAME_VALUE="${GITHUB_ACTOR:-build-sandbox-ci}"; \
+    GIT_EMAIL_VALUE="${GITHUB_ACTOR:+${GITHUB_ACTOR}@users.noreply.github.com}"; \
+    if [[ -z "$GIT_EMAIL_VALUE" ]]; then GIT_EMAIL_VALUE="build-sandbox-ci@local"; fi; \
+    git -C {{ROOT_DIR}} config user.name "$GIT_NAME_VALUE"; \
+    git -C {{ROOT_DIR}} config user.email "$GIT_EMAIL_VALUE"; \
+    echo "info: configured local git identity for tagging as $GIT_NAME_VALUE <$GIT_EMAIL_VALUE>" >&2; \
+  fi; \
   git -C {{ROOT_DIR}} fetch --force --tags "$REMOTE" "+refs/tags/*:refs/tags/*"; \
   RC_TAG="$(just --justfile {{ROOT_DIR}}/Justfile git::next-rc-tag "$BASE")"; \
   RC_VERSION="${RC_TAG#v}"; \
@@ -202,6 +210,14 @@ promote-tag candidate_tag release_version remote="origin":
   if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then \
     echo "error: release version '$RELEASE_VERSION_RAW' must match <major>.<minor>.<patch>" >&2; \
     exit 1; \
+  fi; \
+  if ! git -C {{ROOT_DIR}} config --get user.name >/dev/null || ! git -C {{ROOT_DIR}} config --get user.email >/dev/null; then \
+    GIT_NAME_VALUE="${GITHUB_ACTOR:-build-sandbox-ci}"; \
+    GIT_EMAIL_VALUE="${GITHUB_ACTOR:+${GITHUB_ACTOR}@users.noreply.github.com}"; \
+    if [[ -z "$GIT_EMAIL_VALUE" ]]; then GIT_EMAIL_VALUE="build-sandbox-ci@local"; fi; \
+    git -C {{ROOT_DIR}} config user.name "$GIT_NAME_VALUE"; \
+    git -C {{ROOT_DIR}} config user.email "$GIT_EMAIL_VALUE"; \
+    echo "info: configured local git identity for tagging as $GIT_NAME_VALUE <$GIT_EMAIL_VALUE>" >&2; \
   fi; \
   git -C {{ROOT_DIR}} fetch --force --tags "$REMOTE" "+refs/tags/*:refs/tags/*"; \
   OBJ_TYPE="$(git -C {{ROOT_DIR}} cat-file -t "$CANDIDATE_TAG" 2>/dev/null || true)"; \
