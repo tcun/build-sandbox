@@ -49,6 +49,9 @@ build-profile profile machine="qemux86-64" requested_ref="" resolved_commit="" r
     if [[ -z "$REQUESTED_REF" ]]; then REQUESTED_REF="${GITHUB_REF_NAME:-local}"; fi; \
     if [[ -z "$RESOLVED_COMMIT" ]]; then RESOLVED_COMMIT="$(git rev-parse HEAD)"; fi; \
     SOURCE_BRANCH_VALUE="$REQUESTED_REF"; \
+    if [[ "$SOURCE_BRANCH_VALUE" =~ ^[0-9]+/merge$ || "$SOURCE_BRANCH_VALUE" =~ ^refs/pull/[0-9]+/merge$ ]]; then \
+      SOURCE_BRANCH_VALUE="${GITHUB_HEAD_REF:-${GITHUB_BASE_REF:-}}"; \
+    fi; \
     if [[ "$SOURCE_BRANCH_VALUE" =~ ^[0-9a-f]{7,40}$ || "$SOURCE_BRANCH_VALUE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then \
       SOURCE_BRANCH_VALUE="$(git for-each-ref --format='%(refname:short)' --contains "$RESOLVED_COMMIT" refs/remotes/origin | sed -n 's#^origin/##p' | head -n1 || true)"; \
     fi; \
@@ -108,7 +111,7 @@ release-candidate tag="" machine="qemux86-64":
 # Canonical Yocto test build used by push/PR quality gates.
 yocto-test machine="qemux86-64":
   @cd {{ROOT_DIR}}; \
-    REQUESTED_REF="${GITHUB_REF_NAME:-main}"; \
+    REQUESTED_REF="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-main}}"; \
     RESOLVED_COMMIT="$(git rev-parse HEAD)"; \
     just ci::build-profile test "{{machine}}" "$REQUESTED_REF" "$RESOLVED_COMMIT" "true"
 

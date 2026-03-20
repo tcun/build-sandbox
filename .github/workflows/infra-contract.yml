@@ -66,10 +66,7 @@ jobs:
 
           touch "$DEPLOY_DIR/template-image-minimal-qemux86-64.rootfs.qemuboot.conf"
           touch "$DEPLOY_DIR/template-image-minimal-qemux86-64.rootfs.ext4"
-          cat > "$DEPLOY_DIR/template-image-minimal-qemux86-64.manifest" <<'MANIFEST'
-smoke-core
-openssh
-MANIFEST
+          printf "smoke-core\nopenssh\n" > "$DEPLOY_DIR/template-image-minimal-qemux86-64.manifest"
           echo "hello" > "$DEPLOY_DIR/sample.bin"
 
           YOCTO_ROOT="$YOCTO_ROOT_MOCK" ARTIFACT_ROOT="$ARTIFACT_ROOT_MOCK" just ci::contract-check ci qemux86-64 test deploy,poky,artifact_root
@@ -99,12 +96,8 @@ MANIFEST
 
           RUNNER_ENV="$TMP_ROOT/runner.env"
           ARTIFACT_ENV="$TMP_ROOT/artifact.env"
-          cat > "$RUNNER_ENV" <<'RENV'
-ARTIFACT_ROOT=/srv/runner-artifacts
-RENV
-          cat > "$ARTIFACT_ENV" <<'AENV'
-ARTIFACT_ROOT=/srv/server-artifacts
-AENV
+          printf "ARTIFACT_ROOT=/srv/runner-artifacts\n" > "$RUNNER_ENV"
+          printf "ARTIFACT_ROOT=/srv/server-artifacts\n" > "$ARTIFACT_ENV"
 
           if just infra::contract-check "$RUNNER_ENV" "$ARTIFACT_ENV" >/tmp/mismatch.out 2>&1; then
             echo "error: expected ARTIFACT_ROOT mismatch to fail" >&2
