@@ -115,7 +115,8 @@ yocto-test machine="qemux86-64":
     RESOLVED_COMMIT="${PR_HEAD_SHA:-$(git rev-parse HEAD)}"; \
     just ci::build-profile test "{{machine}}" "$REQUESTED_REF" "$RESOLVED_COMMIT" "true"
 
-# Promote candidate artifacts to a stable release (no rebuild).
+# Promote candidate to a stable release: bumps Cargo.toml to the stable version,
+# commits, tags, pushes, then promotes the RC build artifacts (no Yocto rebuild).
 promote-candidate candidate_tag release_version machine="qemux86-64" remote="origin":
   @cd {{ROOT_DIR}}; \
     CANDIDATE_TAG="{{candidate_tag}}"; \
@@ -127,9 +128,11 @@ promote-candidate candidate_tag release_version machine="qemux86-64" remote="ori
     eval "$TAG_OUT"; \
     [[ -n "${STABLE_TAG:-}" ]] || { echo "error: missing STABLE_TAG from git::promote-tag" >&2; exit 1; }; \
     [[ -n "${CANDIDATE_COMMIT:-}" ]] || { echo "error: missing CANDIDATE_COMMIT from git::promote-tag" >&2; exit 1; }; \
+    [[ -n "${RELEASE_COMMIT:-}" ]] || { echo "error: missing RELEASE_COMMIT from git::promote-tag" >&2; exit 1; }; \
     PROMOTE_OUT="$(just infra::artifact-promote-candidate "$CANDIDATE_TAG" "$STABLE_TAG" "$MACHINE" "$CANDIDATE_COMMIT")"; \
     URL_VALUE="$(echo "$PROMOTE_OUT" | awk -F= '/^URL=/{print $2; exit}')"; \
     echo "$PROMOTE_OUT"; \
     echo "STABLE_TAG=$STABLE_TAG"; \
     echo "CANDIDATE_COMMIT=$CANDIDATE_COMMIT"; \
+    echo "RELEASE_COMMIT=$RELEASE_COMMIT"; \
     echo "PROMOTION_URL=$URL_VALUE"

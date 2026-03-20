@@ -194,8 +194,10 @@ release-candidate-publish base remote="origin":
   echo "RC_VERSION=$RC_VERSION"; \
   echo "BRANCH=$BRANCH"
 
-# Create (or verify) stable release tag from an existing candidate tag.
-# Fails if the stable tag exists on a different commit.
+# Cut and push a stable release commit and tag from an existing candidate tag.
+# Writes the stable version into apps/Cargo.toml, commits on the current branch,
+# places the annotated stable tag on that commit, and pushes both.
+# Must be run from the branch where the RC commit is HEAD (non-detached).
 promote-tag candidate_tag release_version remote="origin":
   @CANDIDATE_TAG_RAW="{{candidate_tag}}"; \
   RELEASE_VERSION_RAW="{{release_version}}"; \
@@ -219,6 +221,12 @@ promote-tag candidate_tag release_version remote="origin":
     git -C {{ROOT_DIR}} config user.email "$GIT_EMAIL_VALUE"; \
     echo "info: configured local git identity for tagging as $GIT_NAME_VALUE <$GIT_EMAIL_VALUE>" >&2; \
   fi; \
+  BRANCH="$(git -C {{ROOT_DIR}} symbolic-ref --quiet --short HEAD || true)"; \
+  if [[ -z "$BRANCH" ]]; then \
+    echo "error: current HEAD is detached; checkout the release branch before promoting" >&2; \
+    exit 1; \
+  fi; \
+  just --justfile {{ROOT_DIR}}/Justfile git::assert-clean-working-tree; \
   git -C {{ROOT_DIR}} fetch --force --tags "$REMOTE" "+refs/tags/*:refs/tags/*"; \
   OBJ_TYPE="$(git -C {{ROOT_DIR}} cat-file -t "$CANDIDATE_TAG" 2>/dev/null || true)"; \
   if [[ "$OBJ_TYPE" != "tag" ]]; then \
@@ -226,24 +234,41 @@ promote-tag candidate_tag release_version remote="origin":
     exit 1; \
   fi; \
   CANDIDATE_COMMIT="$(git -C {{ROOT_DIR}} rev-list -n1 "$CANDIDATE_TAG")"; \
+  HEAD_COMMIT="$(git -C {{ROOT_DIR}} rev-parse HEAD)"; \
+  if [[ "$HEAD_COMMIT" != "$CANDIDATE_COMMIT" ]]; then \
+    echo "error: HEAD ($HEAD_COMMIT) does not match the candidate commit ($CANDIDATE_COMMIT)" >&2; \
+    echo "       sync '$BRANCH' to the RC commit before promoting" >&2; \
+    exit 1; \
+  fi; \
   TAG_CREATED="false"; \
+  RELEASE_COMMIT=""; \
   if git -C {{ROOT_DIR}} rev-parse "$STABLE_TAG" >/dev/null 2>&1; then \
     STABLE_OBJ_TYPE="$(git -C {{ROOT_DIR}} cat-file -t "$STABLE_TAG" 2>/dev/null || true)"; \
     if [[ "$STABLE_OBJ_TYPE" != "tag" ]]; then \
       echo "error: existing stable tag '$STABLE_TAG' must be annotated" >&2; \
       exit 1; \
     fi; \
-    STABLE_COMMIT="$(git -C {{ROOT_DIR}} rev-list -n1 "$STABLE_TAG")"; \
-    if [[ "$STABLE_COMMIT" != "$CANDIDATE_COMMIT" ]]; then \
-      echo "error: stable tag '$STABLE_TAG' exists at $STABLE_COMMIT (candidate commit is $CANDIDATE_COMMIT)" >&2; \
+    RELEASE_COMMIT="$(git -C {{ROOT_DIR}} rev-list -n1 "$STABLE_TAG")"; \
+    STABLE_PARENT="$(git -C {{ROOT_DIR}} log --format=%P -1 "$RELEASE_COMMIT")"; \
+    if [[ "$STABLE_PARENT" != "$CANDIDATE_COMMIT" ]]; then \
+      echo "error: stable tag '$STABLE_TAG' exists but its parent ($STABLE_PARENT) is not the candidate commit ($CANDIDATE_COMMIT)" >&2; \
       exit 1; \
     fi; \
-    echo "info: stable tag '$STABLE_TAG' already points to candidate commit" >&2; \
+    echo "info: stable tag '$STABLE_TAG' already promoted from candidate commit" >&2; \
   else \
-    git -C {{ROOT_DIR}} tag -a "$STABLE_TAG" "$CANDIDATE_COMMIT" -m "Release $STABLE_TAG (promoted from $CANDIDATE_TAG)"; \
-    git -C {{ROOT_DIR}} push "$REMOTE" "$STABLE_TAG"; \
+    just --justfile {{ROOT_DIR}}/Justfile git::set-workspace-version "$RELEASE_VERSION"; \
+    just --justfile {{ROOT_DIR}}/Justfile rust::check; \
+    git -C {{ROOT_DIR}} add apps/Cargo.toml; \
+    if [[ -f {{ROOT_DIR}}/apps/Cargo.lock ]]; then \
+      git -C {{ROOT_DIR}} add apps/Cargo.lock; \
+    fi; \
+    git -C {{ROOT_DIR}} commit -m "release: $STABLE_TAG"; \
+    RELEASE_COMMIT="$(git -C {{ROOT_DIR}} rev-parse HEAD)"; \
+    git -C {{ROOT_DIR}} tag -a "$STABLE_TAG" -m "Release $STABLE_TAG (promoted from $CANDIDATE_TAG)"; \
+    git -C {{ROOT_DIR}} push "$REMOTE" "$BRANCH" "$STABLE_TAG"; \
     TAG_CREATED="true"; \
   fi; \
   echo "STABLE_TAG=$STABLE_TAG"; \
   echo "CANDIDATE_COMMIT=$CANDIDATE_COMMIT"; \
+  echo "RELEASE_COMMIT=$RELEASE_COMMIT"; \
   echo "TAG_CREATED=$TAG_CREATED"
