@@ -85,6 +85,10 @@ jobs:
           echo "resolved_commit=$RESOLVED_COMMIT" >> "$GITHUB_OUTPUT"
           echo "branch_or_ref=$BRANCH_OR_REF" >> "$GITHUB_OUTPUT"
 
+      - name: Validate env contract
+        run: |
+          just ci::contract-check ci "${{ inputs.machine }}" "${{ inputs.profile }}"
+
       - name: Run profile build
         run: |
           just ci::build-profile \

@@ -1,6 +1,6 @@
 name: Yocto Canonical Validation
 
-# Automatic push/PR canonical validation gate.
+# Automatic PR canonical validation gate.
 # This is not strictly required for the dev/test/RC/promotion model to function,
 # but it is recommended regression protection for Yocto source-policy + runtime checks.
 
@@ -51,6 +51,9 @@ jobs:
 
       - name: Install kas
         run: pipx install kas
+
+      - name: Validate env contract
+        run: just ci::contract-check ci qemux86-64 test
 
       - name: Run canonical test profile (policy + build + gates)
         run: just ci::yocto-test

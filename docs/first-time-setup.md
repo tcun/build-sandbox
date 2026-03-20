@@ -102,6 +102,7 @@ Run the baseline validations in order:
 
 ```bash
 just ci::guard-no-private-keys
+just ci::contract-check local qemux86-64 test
 just build-dev qemux86-64
 just build-test qemux86-64 true
 ```
@@ -137,21 +138,36 @@ Before first release in a new project, update these repo-bound values:
 
 ## 11. Common First-Day Failures
 
-- `missing deploy dir ... build/yocto/...`
-  - Cause: path mismatch between `YOCTO_ROOT` and local default
-  - Fix: ensure workflows export `YOCTO_ROOT` and use current scripts with path fallback logic
+### Environment Contract (Canonical)
 
-- `is not an annotated tag`
-  - Cause: lightweight RC tag
-  - Fix: create RC using `just release-candidate <x.y.z>`
+| Variable | Local default | CI requirement | Notes |
+|---|---|---|---|
+| `YOCTO_ROOT` | `<repo>/build/yocto` | required | single source for Yocto state paths |
+| `POKY_INIT` | `${YOCTO_ROOT}/sources/poky/oe-init-build-env` | optional override | must be absolute path |
+| `ARTIFACT_ROOT` | `/srv/yocto-artifacts` | required for infra runtime | runner and artifact-server must match |
 
-- `Committer identity unknown` during promotion
-  - Cause: runner git identity missing
-  - Fix: current `just` recipes set local fallback identity automatically
+Derived paths (do not set independently):
 
-- `runqemu ... qemu-helper-native ... doesn't exist`
-  - Cause: booting downloaded artifacts without native helper in current build env
-  - Fix: in current env run `bitbake qemu-helper-native` once
+- `BUILD_DIR=${YOCTO_ROOT}/build/<machine>-<variant>`
+- `DEPLOY_DIR=${BUILD_DIR}/tmp/deploy/images/<machine>`
+
+Checks:
+
+```bash
+just ci::contract-check ci qemux86-64 test
+just infra::contract-check
+```
+
+### Troubleshooting Matrix
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `missing deploy dir` | wrong `YOCTO_ROOT` or variant path | run `just ci::contract-check ...` and fix `YOCTO_ROOT` |
+| `missing ... oe-init-build-env` | `POKY_INIT` not resolvable from `YOCTO_ROOT` | set `POKY_INIT` or fix Yocto sources under `YOCTO_ROOT` |
+| `is not an annotated tag` | RC tag created lightweight | use `just release-candidate <x.y.z>` |
+| `Committer identity unknown` | git identity unset in runner | recipes now auto-set local identity; re-run workflow |
+| `qemu-helper-native ... doesn't exist` | runqemu env lacks native helper | in active env run `bitbake qemu-helper-native` |
+| artifacts not visible in server | runner/server `ARTIFACT_ROOT` mismatch | run `just infra::contract-check` and align both `.env` files |
 
 ## 12. Day-2 Ops Commands
 
@@ -161,4 +177,3 @@ just infra::artifact-logs tail=200 follow=true
 just infra::runner-down
 just infra::artifact-down
 ```
-

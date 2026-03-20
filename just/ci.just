@@ -2,6 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 ROOT_DIR := justfile_directory()
 YOCTO_TEST_GATES_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/test-gates.sh"
+ENV_CONTRACT_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/env-contract.sh"
 PSEUDO_ENV_SANITIZE := "unset PSEUDO_DISABLED PSEUDO_PREFIX PSEUDO_LOCALSTATEDIR PSEUDO_PASSWD FAKEROOTKEY BB_PRESERVE_ENV BB_ENV_PASSTHROUGH"
 
 # Prevent accidental leakage of private deploy keys into git history.
@@ -25,6 +26,12 @@ preflight:
     just rust::check; \
     just rust::test
 
+# Validate canonical environment contract and optionally required derived paths.
+contract-check mode="auto" machine="qemux86-64" variant="test" require_paths="":
+  @ARGS=(--mode "{{mode}}" --machine "{{machine}}" --variant "{{variant}}"); \
+    if [[ -n "{{require_paths}}" ]]; then ARGS+=(--require "{{require_paths}}"); fi; \
+    "{{ENV_CONTRACT_SCRIPT}}" check "${ARGS[@]}"
+
 # Build dev/test profiles with explicit ref and commit metadata.
 build-profile profile machine="qemux86-64" requested_ref="" resolved_commit="" run_simulator="true":
   @cd {{ROOT_DIR}}; \
@@ -38,6 +45,7 @@ build-profile profile machine="qemux86-64" requested_ref="" resolved_commit="" r
       dev|test) ;; \
       *) echo "error: profile must be dev or test" >&2; exit 1 ;; \
     esac; \
+    just ci::contract-check "auto" "$MACHINE" "$PROFILE"; \
     if [[ -z "$REQUESTED_REF" ]]; then REQUESTED_REF="${GITHUB_REF_NAME:-local}"; fi; \
     if [[ -z "$RESOLVED_COMMIT" ]]; then RESOLVED_COMMIT="$(git rev-parse HEAD)"; fi; \
     SOURCE_BRANCH_VALUE="$REQUESTED_REF"; \
@@ -59,10 +67,12 @@ build-profile profile machine="qemux86-64" requested_ref="" resolved_commit="" r
       just rust::check; \
       TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$RESOLVED_COMMIT" just yocto::preflight-source "$MACHINE" dev minimal; \
       TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$RESOLVED_COMMIT" just yocto::build "$MACHINE" dev minimal; \
+      just ci::contract-check "auto" "$MACHINE" "dev" "deploy"; \
     else \
       just rust::ci; \
       TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$RESOLVED_COMMIT" just yocto::preflight-source "$MACHINE" test minimal; \
       TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$RESOLVED_COMMIT" just yocto::build "$MACHINE" test minimal; \
+      just ci::contract-check "auto" "$MACHINE" "test" "deploy,poky"; \
       TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$RESOLVED_COMMIT" RUN_SIMULATOR="$RUN_SIMULATOR" "{{YOCTO_TEST_GATES_SCRIPT}}" "$MACHINE" test minimal; \
     fi
 
@@ -77,6 +87,7 @@ release-candidate tag="" machine="qemux86-64":
     if git -C {{ROOT_DIR}} remote get-url origin >/dev/null 2>&1; then \
       git -C {{ROOT_DIR}} fetch --force --tags origin "+refs/tags/*:refs/tags/*"; \
     fi; \
+    just ci::contract-check "auto" "$MACHINE" "release"; \
     just git::assert-rc-tag "$TAG"; \
     just git::assert-tag-matches-workspace "$TAG"; \
     eval "$(just git::release-env "$TAG")"; \
@@ -91,7 +102,8 @@ release-candidate tag="" machine="qemux86-64":
     echo "SOURCE_BRANCH=$SOURCE_BRANCH_VALUE"; \
     just rust::ci; \
     TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV" just yocto::preflight-source "$MACHINE" release minimal; \
-    TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV" just yocto::build "$MACHINE" release minimal
+    TEMPLATE_VERSION="$VERSION" TEMPLATE_BUILD_VERSION="$BUILD_VERSION" SOURCE_BRANCH="$SOURCE_BRANCH_VALUE" SOURCE_REV="$SOURCE_REV" just yocto::build "$MACHINE" release minimal; \
+    just ci::contract-check "auto" "$MACHINE" "release" "deploy"
 
 # Canonical Yocto test build used by push/PR quality gates.
 yocto-test machine="qemux86-64":

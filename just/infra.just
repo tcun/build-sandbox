@@ -7,10 +7,13 @@ DEFAULT_RUNNER_STACK := "runners/github/yocto"
 DEFAULT_ARTIFACT_STACK := "services/artifact-server"
 RUNNER_ENV_FILE := ROOT_DIR + "/infra/runners/github/yocto/.env"
 RUNNER_ENV_EXAMPLE := ROOT_DIR + "/infra/runners/github/yocto/.env.example"
+ARTIFACT_ENV_FILE := ROOT_DIR + "/infra/services/artifact-server/.env"
+ARTIFACT_ENV_EXAMPLE := ROOT_DIR + "/infra/services/artifact-server/.env.example"
 RUST_TOOLCHAIN_FILE := ROOT_DIR + "/apps/rust-toolchain.toml"
 ARTIFACT_PUBLISH_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/publish-artifacts.sh"
 ARTIFACT_PROMOTE_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/promote-candidate.sh"
 ARTIFACT_RETENTION_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/cleanup-artifacts.sh"
+ENV_CONTRACT_SCRIPT := ROOT_DIR + "/bsp/yocto/scripts/env-contract.sh"
 
 # Generic: start one compose stack under infra/.
 # Example: just infra::stack-up stack=runners/github/yocto build=true
@@ -133,21 +136,31 @@ artifact-publish-profile profile machine="qemux86-64" requested_ref="" resolved_
         exit 1; \
         ;; \
     esac; \
-    CANDIDATE_SOURCE_DIRS=(); \
+    CONTRACT_OUTPUT="$("{{ENV_CONTRACT_SCRIPT}}" print --mode auto --machine "$MACHINE" --variant "$VARIANT" --artifact-root "$ARTIFACT_ROOT_VALUE")"; \
+    eval "$CONTRACT_OUTPUT"; \
     if [[ -z "$SOURCE_DIR" ]]; then \
+      SOURCE_DIR="$DEPLOY_DIR"; \
+    fi; \
+    CANDIDATE_SOURCE_DIRS=("$SOURCE_DIR"); \
+    if [[ ! -d "$SOURCE_DIR" ]]; then \
+      if [[ "${CONTRACT_MODE:-local}" == "ci" ]]; then \
+        echo "error: missing source artifacts dir in CI contract mode: $SOURCE_DIR" >&2; \
+        echo "error: fix YOCTO_ROOT or pass src_dir explicitly to infra::artifact-publish-profile" >&2; \
+        exit 1; \
+      fi; \
+      echo "WARN: canonical source dir missing; trying temporary compatibility fallbacks." >&2; \
       CANDIDATE_SOURCE_DIRS=( \
-        "${YOCTO_ROOT:-}/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}" \
-        "{{YOCTO_ROOT}}/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}" \
+        "$SOURCE_DIR" \
         "{{ROOT_DIR}}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}" \
       ); \
       if [[ -n "${GITHUB_WORKSPACE:-}" ]]; then \
-        CANDIDATE_SOURCE_DIRS+=("${GITHUB_WORKSPACE}/build/yocto/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"); \
         CANDIDATE_SOURCE_DIRS+=("$(dirname "$GITHUB_WORKSPACE")/yocto-state/build/${MACHINE}-${VARIANT}/tmp/deploy/images/${MACHINE}"); \
       fi; \
       for candidate in "${CANDIDATE_SOURCE_DIRS[@]}"; do \
         [[ -n "$candidate" ]] || continue; \
         if [[ -d "$candidate" ]]; then \
           SOURCE_DIR="$candidate"; \
+          echo "WARN: using fallback source artifacts dir: $SOURCE_DIR" >&2; \
           break; \
         fi; \
       done; \
@@ -277,3 +290,21 @@ runner-env-validate:
       echo "WARN: RUNNER_TOKEN is empty. This is fine only if runner is already configured in the existing container." >&2; \
     fi; \
     echo "Runner env validation passed for $RUNNER_REPO_VAL"
+
+# Validate runner/artifact environment contract consistency.
+contract-check runner_env=RUNNER_ENV_EXAMPLE artifact_env=ARTIFACT_ENV_EXAMPLE:
+  @RUNNER_ENV_PATH="{{runner_env}}"; \
+    ARTIFACT_ENV_PATH="{{artifact_env}}"; \
+    [[ -f "$RUNNER_ENV_PATH" ]] || { echo "missing runner env file: $RUNNER_ENV_PATH" >&2; exit 1; }; \
+    [[ -f "$ARTIFACT_ENV_PATH" ]] || { echo "missing artifact env file: $ARTIFACT_ENV_PATH" >&2; exit 1; }; \
+    RUNNER_ARTIFACT_ROOT="$(awk -F= '/^ARTIFACT_ROOT=/{print $2; exit}' "$RUNNER_ENV_PATH" || true)"; \
+    SERVER_ARTIFACT_ROOT="$(awk -F= '/^ARTIFACT_ROOT=/{print $2; exit}' "$ARTIFACT_ENV_PATH" || true)"; \
+    [[ -n "$RUNNER_ARTIFACT_ROOT" ]] || { echo "missing ARTIFACT_ROOT in $RUNNER_ENV_PATH" >&2; exit 1; }; \
+    [[ -n "$SERVER_ARTIFACT_ROOT" ]] || { echo "missing ARTIFACT_ROOT in $ARTIFACT_ENV_PATH" >&2; exit 1; }; \
+    if [[ "$RUNNER_ARTIFACT_ROOT" != "$SERVER_ARTIFACT_ROOT" ]]; then \
+      echo "ARTIFACT_ROOT mismatch:" >&2; \
+      echo "  runner env:  $RUNNER_ARTIFACT_ROOT" >&2; \
+      echo "  artifact env:$SERVER_ARTIFACT_ROOT" >&2; \
+      exit 1; \
+    fi; \
+    echo "Infra env contract OK: ARTIFACT_ROOT=$RUNNER_ARTIFACT_ROOT"

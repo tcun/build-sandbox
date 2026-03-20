@@ -36,6 +36,26 @@ Today the scope is Rust + Yocto, but this sandbox can expand into broader platfo
 - `build-from-ref.yml`: manual `dev`/`test` build from branch/tag/SHA
 - `release-candidate.yml`: automatic on `v*.*.*-rc.*` tag push
 - `promote-candidate.yml`: manual promotion to stable without rebuild
+- `yocto-test.yml`: canonical Yocto PR gate
+- `infra-contract.yml`: lightweight PR contract checks for env/path consistency
+
+## Environment Contract
+
+Canonical variables:
+
+- `YOCTO_ROOT`: required in CI, local default is `<repo>/build/yocto`
+- `POKY_INIT`: optional override, default `${YOCTO_ROOT}/sources/poky/oe-init-build-env`
+- `ARTIFACT_ROOT`: infra publish/serve root, default `/srv/yocto-artifacts`
+
+Derived (never independently configured):
+
+- `BUILD_DIR=${YOCTO_ROOT}/build/<machine>-<variant>`
+- `DEPLOY_DIR=${BUILD_DIR}/tmp/deploy/images/<machine>`
+
+Validation commands:
+
+- `just ci::contract-check ci qemux86-64 test`
+- `just infra::contract-check`
 
 ## Key Docs
 

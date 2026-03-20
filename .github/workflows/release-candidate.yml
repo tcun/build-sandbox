@@ -49,6 +49,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-cargo-
 
+      - name: Validate env contract
+        run: |
+          just ci::contract-check ci qemux86-64 release
+
       - name: Run RC build pipeline
         run: just ci::release-candidate "${{ github.ref_name }}" qemux86-64
 

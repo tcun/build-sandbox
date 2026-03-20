@@ -1,0 +1,113 @@
+name: Infra Contract Checks
+
+on:
+  pull_request:
+    paths:
+      - "just/**"
+      - "bsp/yocto/scripts/**"
+      - "infra/runners/github/yocto/**"
+      - "infra/services/artifact-server/**"
+      - ".github/workflows/infra-contract.yml"
+      - ".github/workflows/yocto-test.yml"
+      - ".github/workflows/build-from-ref.yml"
+      - ".github/workflows/release-candidate.yml"
+      - ".github/workflows/promote-candidate.yml"
+      - "docs/first-time-setup.md"
+      - "README.md"
+
+concurrency:
+  group: infra-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: env contract + script smoke checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Validate path-drift literals are not reintroduced
+        run: |
+          set -euo pipefail
+          if grep -RIn "/home/runner/work/build-sandbox/build-sandbox/build/yocto" just bsp/yocto/scripts .github/workflows; then
+            echo "error: found drift-prone hardcoded workspace path" >&2
+            exit 1
+          fi
+
+      - name: CI mode requires YOCTO_ROOT
+        run: |
+          set -euo pipefail
+          if just ci::contract-check ci qemux86-64 test >/tmp/contract.out 2>&1; then
+            echo "error: expected ci::contract-check to fail without YOCTO_ROOT in CI mode" >&2
+            exit 1
+          fi
+          grep -q "YOCTO_ROOT is required in CI mode" /tmp/contract.out
+
+      - name: Local mode defaulting works
+        run: |
+          just ci::contract-check local qemux86-64 test
+
+      - name: Mocked contract checks + smoke tests
+        run: |
+          set -euo pipefail
+
+          TMP_ROOT="$(mktemp -d)"
+          YOCTO_ROOT_MOCK="$TMP_ROOT/yocto-root"
+          DEPLOY_DIR="$YOCTO_ROOT_MOCK/build/qemux86-64-test/tmp/deploy/images/qemux86-64"
+          ARTIFACT_ROOT_MOCK="$TMP_ROOT/artifacts"
+
+          mkdir -p "$DEPLOY_DIR" "$YOCTO_ROOT_MOCK/sources/poky" "$ARTIFACT_ROOT_MOCK"
+          touch "$YOCTO_ROOT_MOCK/sources/poky/oe-init-build-env"
+
+          touch "$DEPLOY_DIR/template-image-minimal-qemux86-64.rootfs.qemuboot.conf"
+          touch "$DEPLOY_DIR/template-image-minimal-qemux86-64.rootfs.ext4"
+          cat > "$DEPLOY_DIR/template-image-minimal-qemux86-64.manifest" <<'MANIFEST'
+smoke-core
+openssh
+MANIFEST
+          echo "hello" > "$DEPLOY_DIR/sample.bin"
+
+          YOCTO_ROOT="$YOCTO_ROOT_MOCK" ARTIFACT_ROOT="$ARTIFACT_ROOT_MOCK" just ci::contract-check ci qemux86-64 test deploy,poky,artifact_root
+          YOCTO_ROOT="$YOCTO_ROOT_MOCK" just qemu::print-config qemux86-64 test minimal | grep -q "DEPLOY_DIR=$DEPLOY_DIR"
+
+          YOCTO_ROOT="$YOCTO_ROOT_MOCK" ARTIFACT_ROOT="$ARTIFACT_ROOT_MOCK" RUN_SIMULATOR=false \
+            bsp/yocto/scripts/test-gates.sh qemux86-64 test minimal
+
+          OUT="$(YOCTO_ROOT="$YOCTO_ROOT_MOCK" ARTIFACT_ROOT="$ARTIFACT_ROOT_MOCK" \
+            just infra::artifact-publish-profile test qemux86-64 infra-contract deadbeef 123456 infra-contract "" "" "")"
+          echo "$OUT" | grep -q '^DEST_REL=artifacts/test/infra-contract/123456/qemux86-64$'
+          test -d "$ARTIFACT_ROOT_MOCK/artifacts/test/infra-contract/123456/qemux86-64"
+
+      - name: Negative checks
+        run: |
+          set -euo pipefail
+
+          TMP_ROOT="$(mktemp -d)"
+          YOCTO_ROOT_NO_POKY="$TMP_ROOT/yocto-no-poky"
+          mkdir -p "$YOCTO_ROOT_NO_POKY/build/qemux86-64-test/tmp/deploy/images/qemux86-64"
+
+          if YOCTO_ROOT="$YOCTO_ROOT_NO_POKY" just ci::contract-check ci qemux86-64 test poky >/tmp/no-poky.out 2>&1; then
+            echo "error: expected missing poky check to fail" >&2
+            exit 1
+          fi
+          grep -q "missing poky init" /tmp/no-poky.out
+
+          RUNNER_ENV="$TMP_ROOT/runner.env"
+          ARTIFACT_ENV="$TMP_ROOT/artifact.env"
+          cat > "$RUNNER_ENV" <<'RENV'
+ARTIFACT_ROOT=/srv/runner-artifacts
+RENV
+          cat > "$ARTIFACT_ENV" <<'AENV'
+ARTIFACT_ROOT=/srv/server-artifacts
+AENV
+
+          if just infra::contract-check "$RUNNER_ENV" "$ARTIFACT_ENV" >/tmp/mismatch.out 2>&1; then
+            echo "error: expected ARTIFACT_ROOT mismatch to fail" >&2
+            exit 1
+          fi
+          grep -q "ARTIFACT_ROOT mismatch" /tmp/mismatch.out
