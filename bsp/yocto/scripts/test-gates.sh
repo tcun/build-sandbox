@@ -8,10 +8,30 @@ RUN_SIMULATOR="${RUN_SIMULATOR:-true}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 KAS_DIR="$ROOT_DIR/bsp/yocto/kas"
-YOCTO_ROOT="$ROOT_DIR/build/yocto"
-BUILD_DIR="$YOCTO_ROOT/build/${MACHINE}-${VARIANT}"
+YOCTO_ROOT_VALUE="${YOCTO_ROOT:-$ROOT_DIR/build/yocto}"
+BUILD_DIR="$YOCTO_ROOT_VALUE/build/${MACHINE}-${VARIANT}"
 DEPLOY_DIR="$BUILD_DIR/tmp/deploy/images/$MACHINE"
-POKY_INIT="$YOCTO_ROOT/sources/poky/oe-init-build-env"
+POKY_INIT="$YOCTO_ROOT_VALUE/sources/poky/oe-init-build-env"
+
+if [[ ! -d "$DEPLOY_DIR" ]]; then
+  CANDIDATE_YOCTO_ROOTS=(
+    "$YOCTO_ROOT_VALUE"
+    "$ROOT_DIR/build/yocto"
+  )
+  if [[ -n "${GITHUB_WORKSPACE:-}" ]]; then
+    CANDIDATE_YOCTO_ROOTS+=("$(dirname "$GITHUB_WORKSPACE")/yocto-state")
+  fi
+  for candidate_root in "${CANDIDATE_YOCTO_ROOTS[@]}"; do
+    candidate_deploy="$candidate_root/build/${MACHINE}-${VARIANT}/tmp/deploy/images/$MACHINE"
+    if [[ -d "$candidate_deploy" ]]; then
+      YOCTO_ROOT_VALUE="$candidate_root"
+      BUILD_DIR="$YOCTO_ROOT_VALUE/build/${MACHINE}-${VARIANT}"
+      DEPLOY_DIR="$candidate_deploy"
+      POKY_INIT="$YOCTO_ROOT_VALUE/sources/poky/oe-init-build-env"
+      break
+    fi
+  done
+fi
 
 [[ -d "$DEPLOY_DIR" ]] || { echo "error: missing deploy dir: $DEPLOY_DIR" >&2; exit 1; }
 
