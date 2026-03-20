@@ -35,6 +35,25 @@ fi
 
 [[ -d "$DEPLOY_DIR" ]] || { echo "error: missing deploy dir: $DEPLOY_DIR" >&2; exit 1; }
 
+if [[ ! -f "$POKY_INIT" ]]; then
+  CANDIDATE_POKY_INITS=(
+    "$YOCTO_ROOT_VALUE/sources/poky/oe-init-build-env"
+    "$ROOT_DIR/build/yocto/sources/poky/oe-init-build-env"
+  )
+  if [[ -n "${YOCTO_ROOT:-}" ]]; then
+    CANDIDATE_POKY_INITS+=("${YOCTO_ROOT}/sources/poky/oe-init-build-env")
+  fi
+  if [[ -n "${GITHUB_WORKSPACE:-}" ]]; then
+    CANDIDATE_POKY_INITS+=("$(dirname "$GITHUB_WORKSPACE")/yocto-state/sources/poky/oe-init-build-env")
+  fi
+  for candidate_poky_init in "${CANDIDATE_POKY_INITS[@]}"; do
+    if [[ -f "$candidate_poky_init" ]]; then
+      POKY_INIT="$candidate_poky_init"
+      break
+    fi
+  done
+fi
+
 CONF_FILE="$(ls -1 "$DEPLOY_DIR"/*.qemuboot.conf 2>/dev/null | head -n1 || true)"
 [[ -n "$CONF_FILE" ]] || { echo "error: missing qemuboot.conf (bootable image not found)" >&2; exit 1; }
 
