@@ -58,7 +58,12 @@ if [[ "$RUN_SIMULATOR" == "true" ]]; then
     set +u
     source "$POKY_INIT" "$BUILD_DIR" >/dev/null
     set -u
-    timeout 180s runqemu "$QEMU_CONF" nographic >"$QEMU_LOG" 2>&1
+    RUNQEMU_ARGS=("$QEMU_CONF" "nographic")
+    if [[ ! -c /dev/net/tun ]]; then
+      echo "WARN: /dev/net/tun unavailable; using slirp networking for CI runqemu check" >&2
+      RUNQEMU_ARGS+=("slirp")
+    fi
+    timeout 180s runqemu "${RUNQEMU_ARGS[@]}" >"$QEMU_LOG" 2>&1
   )
   RC=$?
   set -e
