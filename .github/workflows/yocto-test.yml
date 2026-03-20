@@ -5,19 +5,6 @@ name: Yocto Canonical Validation
 # but it is recommended regression protection for Yocto source-policy + runtime checks.
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "bsp/yocto/**"
-      - "just/**"
-      - "infra/runners/github/yocto/**"
-      - "apps/**"
-      - "Justfile"
-      - ".github/workflows/yocto-test.yml"
-      - ".github/workflows/release-candidate.yml"
-      - ".github/workflows/build-from-ref.yml"
-      - ".github/workflows/promote-candidate.yml"
   pull_request:
     paths:
       - "bsp/yocto/**"
