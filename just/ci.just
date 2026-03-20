@@ -74,6 +74,9 @@ release-candidate tag="" machine="qemux86-64":
     just ci::guard-no-private-keys; \
     if [[ -z "$TAG" ]]; then TAG="${GITHUB_REF_NAME:-}"; fi; \
     [[ -n "$TAG" ]] || { echo "error: missing RC tag (pass explicitly or set GITHUB_REF_NAME)" >&2; exit 1; }; \
+    if git -C {{ROOT_DIR}} remote get-url origin >/dev/null 2>&1; then \
+      git -C {{ROOT_DIR}} fetch --force --tags origin "+refs/tags/*:refs/tags/*"; \
+    fi; \
     just git::assert-rc-tag "$TAG"; \
     just git::assert-tag-matches-workspace "$TAG"; \
     eval "$(just git::release-env "$TAG")"; \
