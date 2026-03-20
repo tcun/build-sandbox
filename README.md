@@ -1,22 +1,44 @@
-# build-sandbox repo
+# build-sandbox
 
-My personal sandbox repo for mainly experimenting with monorepo and automation infrastructure.
+This repository is a practical sandbox for rapidly iterating on build and release infrastructure.
 
-## Manual Installs
+The current focus is embedded workflows around:
 
-cargo
-just-lsp
-kas
-podman
+- Rust application development
+- Yocto-based image builds
+- CI/CD automation for build, artifact publishing, release-candidate flow, and promotion
 
-## CI/CD Commands
+The intent is to move fast, validate ideas in real pipelines, and continuously improve tooling and conventions.  
+Today the scope is Rust + Yocto, but this sandbox can expand into broader platform and infrastructure experiments over time.
 
-- `just build-dev` for local dev profile build
-- `just build-test` for local canonical test profile build
-- `just release-candidate <X.Y.Z>` to cut and push the next `vX.Y.Z-rc.N` tag
+## What This Repo Is For
 
-GitHub workflows:
+- Prototype and harden CI/CD workflows before broader adoption
+- Test reproducible artifact and release promotion patterns
+- Exercise runner/container infrastructure with realistic embedded build workloads
+- Keep a single place to iterate on scripts, recipes, and operational runbooks
 
-- `build-from-ref.yml` (manual `dev`/`test` build from branch/tag/SHA)
-- `release-candidate.yml` (automatic on `v*.*.*-rc.*` tag push)
-- `promote-candidate.yml` (manual promotion to stable without rebuild)
+## Local Requirements
+
+- `cargo`
+- `just`
+- `kas`
+- `podman` (or `podman-compose`)
+
+## Common Commands
+
+- `just build-dev` for local dev profile builds
+- `just build-test` for local canonical test profile builds
+- `just release-candidate <X.Y.Z>` to cut and push the next `vX.Y.Z-rc.N`
+
+## CI Workflows
+
+- `build-from-ref.yml`: manual `dev`/`test` build from branch/tag/SHA
+- `release-candidate.yml`: automatic on `v*.*.*-rc.*` tag push
+- `promote-candidate.yml`: manual promotion to stable without rebuild
+
+## Key Docs
+
+- [First-Time Setup](docs/first-time-setup.md)
+- [Release Candidate And Promotion Workflow](docs/release-workflow.md)
+- [Versioning Proposal](docs/versioning.md)
