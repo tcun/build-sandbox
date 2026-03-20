@@ -17,7 +17,7 @@ jobs:
     name: build rc artifacts
     env:
       YOCTO_ROOT: /home/runner/work/yocto-state
-      POKY_INIT: /home/runner/work/yocto-state/sources/poky/oe-init-build-env
+      POKY_INIT: ${{ github.workspace }}/build/yocto/sources/poky/oe-init-build-env
     runs-on:
       - self-hosted
       - linux
