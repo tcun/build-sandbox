@@ -41,6 +41,7 @@ jobs:
     name: ${{ inputs.profile }} build from ref
     env:
       YOCTO_ROOT: /home/runner/work/yocto-state
+      POKY_INIT: ${{ github.workspace }}/build/yocto/sources/poky/oe-init-build-env
     runs-on:
       - self-hosted
       - linux
