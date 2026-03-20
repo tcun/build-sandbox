@@ -34,7 +34,7 @@ jobs:
       - name: Validate path-drift literals are not reintroduced
         run: |
           set -euo pipefail
-          if grep -RIn "/home/runner/work/build-sandbox/build-sandbox/build/yocto" just bsp/yocto/scripts .github/workflows; then
+          if grep -RIn --exclude="infra-contract.yml" "/home/runner/work/build-sandbox/build-sandbox/build/yocto" just bsp/yocto/scripts .github/workflows; then
             echo "error: found drift-prone hardcoded workspace path" >&2
             exit 1
           fi

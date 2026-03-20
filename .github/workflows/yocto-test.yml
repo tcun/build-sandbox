@@ -37,6 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Install just
         uses: taiki-e/install-action@just
@@ -56,4 +57,7 @@ jobs:
         run: just ci::contract-check ci qemux86-64 test
 
       - name: Run canonical test profile (policy + build + gates)
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: just ci::yocto-test

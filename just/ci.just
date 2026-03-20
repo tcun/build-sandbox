@@ -111,8 +111,8 @@ release-candidate tag="" machine="qemux86-64":
 # Canonical Yocto test build used by push/PR quality gates.
 yocto-test machine="qemux86-64":
   @cd {{ROOT_DIR}}; \
-    REQUESTED_REF="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-main}}"; \
-    RESOLVED_COMMIT="$(git rev-parse HEAD)"; \
+    REQUESTED_REF="${PR_HEAD_REF:-${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-main}}}"; \
+    RESOLVED_COMMIT="${PR_HEAD_SHA:-$(git rev-parse HEAD)}"; \
     just ci::build-profile test "{{machine}}" "$REQUESTED_REF" "$RESOLVED_COMMIT" "true"
 
 # Promote candidate artifacts to a stable release (no rebuild).
