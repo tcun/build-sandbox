@@ -10,5 +10,5 @@ fn main() {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "unknown".to_string());
 
-    println!("Smoke-core is running on {}!", flavor);
+    println!("Smoke-core is running on {}!!", flavor);
 }
